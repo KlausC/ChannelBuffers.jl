@@ -21,13 +21,16 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
     end
 end
 
-function ChannelIO(ch::Channel, bufsiz::Integer)
+const DEFAULT_BUFFER_SIZE = 1024
+const DEFAULT_CHANNEL_LENGTH = 1
+
+function ChannelIO(ch::Channel, bufsiz::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, zeros(UInt8, 0), bufsiz)
 end
 
-function ChannelIO(bufsiz::Integer)
+function ChannelIO(bufsiz::Integer=DEFAULT_BUFFER_SIZE)
     T = Vector{UInt8}
-    ch = Channel{T}(1)
+    ch = Channel{T}(DEFAULT_CHANNEL_LENGTH)
     ChannelIO(ch, bufsiz)
 end
 
@@ -58,9 +61,12 @@ function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
 end
 
 function Base.flush(cio::ChannelIO)
-    k = cio.offset
-    k == 0 && return
-    resize!(cio.buffer, k)
+    _flush(cio, false)
+end
+
+function _flush(cio::ChannelIO, eofsend::Bool)
+    cio.offset == 0 && !eofsend && return
+    resize!(cio.buffer, cio.offset)
     put!(cio.ch, cio.buffer)
     cio.buffer = getbuffer(cio)
     cio.offset = 0
@@ -69,9 +75,8 @@ function Base.flush(cio::ChannelIO)
 end
 
 function Base.close(cio::ChannelIO)
-    flush(cio)
+    _flush(cio, true)
     cio.bufsiz = 0
-    put!(cio.ch, getbuffer(cio))
     close(cio.ch)
     nothing
 end
@@ -118,7 +123,6 @@ end
 
 function Base.eof(cio::ChannelIO)
     cio.read < cio.offset && return false
-    cio.eofpending && return true
     takebuffer!(cio)
     return cio.eofpending && cio.read >= cio.offset
 end
@@ -151,11 +155,18 @@ function getbuffer(cio::ChannelIO)
 end
 
 function takebuffer!(cio::ChannelIO)
-    cio.buffer = take!(cio.ch)
-    cio.offset = length(cio.buffer)
-    cio.eofpending = cio.offset == 0
+    if !isopen(cio.ch) && !isready(cio.ch)
+        cio.eofpending = true
+        cio.offset = 0
+    else
+        cio.buffer = take!(cio.ch)
+        cio.offset = length(cio.buffer)
+        cio.eofpending |= cio.offset == 0
+    end
     cio.read = 0
     cio.offset
 end
+
+include("tasks.jl")
 
 end # module
