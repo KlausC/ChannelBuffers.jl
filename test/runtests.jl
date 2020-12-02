@@ -16,7 +16,7 @@ end
 const WTIME = 0.1
 
 function wrcha(bsize=32)
-    wio = ChannelIO(bsize);
+    wio = ChannelIO(:W, bsize);
     rio = ChannelIO(wio.ch);
     wio, rio
 end
@@ -30,7 +30,8 @@ end
 @testset "ChannelBuffers" begin
 
 @testset "eof" begin
-    @test (wio = ChannelIO()) != nothing
+    @test_throws ArgumentError ChannelIO(:X)
+    @test (wio = ChannelIO(:W)) != nothing
     @test ChannelIO(wio.ch) != nothing
     wio, rio = wrcha()
     @test bytesavailable(rio) == 0
@@ -70,6 +71,21 @@ end
     @test read(rio, String) == input
     @test bytesavailable(rio) == 0
     @test eof(rio)
+end
+
+@testset "read on write-only" begin
+    wio = ChannelIO(:W)
+    @test_throws InvalidStateException read(wio, UInt8)
+    @test_throws InvalidStateException peek(wio)
+    @test_throws InvalidStateException eof(wio)
+    @test_throws InvalidStateException bytesavailable(wio)
+    @test flush(wio) === nothing
+end
+
+@testset "write on read-only" begin
+    rio = ChannelIO(:R)
+    @test_throws InvalidStateException write(rio, "hallo")
+    @test flush(rio) === nothing
 end
 
 """
