@@ -1,0 +1,15 @@
+
+# ignore org
+*.org
+
+# ignore newly added matrices 
+Manifest.toml
+
+*.mem
+*.cov
+
+# ignore generated files from Sphinx
+_build
+_static
+_templates
+
