@@ -13,7 +13,7 @@ struct BufferTask{In<:UIO,Out<:UIO}
     cout::Out
     task::Ref{Task}
     function BufferTask(cin::In, cout::Out) where {In,Out}
-        new{In,Out}(d, cin, cout, Ref{Task}())
+        new{In,Out}(cin, cout, Ref{Task}())
     end
 end
 
@@ -34,7 +34,7 @@ function task!(btd::BufferTaskDescription, bt::BufferTask)
         try
             btd.f(bt, btd.args...)
         finally
-            close(bt.cout)
+            bt.cout isa ChannelIO && close(bt.cout)
         end
     end
     Task(task_function)
@@ -67,10 +67,11 @@ end
 
 using Tar
 using Downloads
-using CodecZlib
+using TranscodingStreams, CodecZlib
+import TranscodingStreams.Codec
 
 export Source, Tarc, Download
-export Gzip, Gunzip
+export Transcode, Gzip, Gunzip
 export Destination, Tarx
 
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
@@ -119,6 +120,21 @@ function Gzip()
     end
     BufferTaskDescription(_gzip)
 end
+
+function Transcode(codec::Codec)
+    function _transcode(bt::BufferTask)
+        buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE * 10)
+        TranscodingStreams.initialize(codec)
+        while !eof(bt.cin)
+            n = readbytes!(bt.cin, buffer)
+            r = transcode(codec, buffer[1:n])
+            write(bt.cout, r)
+        end
+        flush(bt.cout)
+        TranscodingStreams.finalize(codec)
+    end
+    BufferTaskDescription(_transcode)
+end   
 
 function Source(src::UIO)
     function _source(bt::BufferTask, src::UIO)

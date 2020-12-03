@@ -23,7 +23,7 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
     end
 end
 
-const DEFAULT_BUFFER_SIZE = 1024
+const DEFAULT_BUFFER_SIZE = 8192
 const DEFAULT_CHANNEL_LENGTH = 1
 
 function ChannelIO(ch::Channel, rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
