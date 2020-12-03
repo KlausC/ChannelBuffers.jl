@@ -8,35 +8,31 @@ end
 
 const UIO = Union{IO,AbstractString}
 
-struct BufferTask{D<:BufferTaskDescription,In<:UIO,Out<:UIO}
-    call::D
+struct BufferTask{In<:UIO,Out<:UIO}
     cin::In
     cout::Out
     task::Ref{Task}
-    function BufferTask(d::D, cin::In, cout::Out) where {D,In,Out}
-        new{D,In,Out}(d, cin, cout, Ref{Task}())
+    function BufferTask(cin::In, cout::Out) where {In,Out}
+        new{In,Out}(d, cin, cout, Ref{Task}())
     end
 end
 
-struct BufferTaskDList
-    list::Vector{<:BufferTaskDescription}
-end
 struct BufferTaskList
-    list::Vector{<:BufferTask}
+    list::Vector{<:BufferTaskDescription}
 end
 
 import Base: |
 function |(src::BufferTaskDescription, bt::BufferTaskDescription)
-    BufferTaskDList([src, bt])
+    BufferTaskList([src, bt])
 end
-function |(src::BufferTaskDList, bt::BufferTaskDescription)
-    BufferTaskDList(vcat(src.list, bt))
+function |(src::BufferTaskList, bt::BufferTaskDescription)
+    BufferTaskList(vcat(src.list, bt))
 end
     
-function task!(bt::BufferTask)
+function task!(btd::BufferTaskDescription, bt::BufferTask)
     function task_function()
         try
-            bt.call.f(bt, bt.call.args...)
+            btd.f(bt, btd.args...)
         finally
             close(bt.cout)
         end
@@ -45,24 +41,24 @@ function task!(bt::BufferTask)
 end
 
 function _schedule(s, cin, cout)
-    bt = BufferTask(s, cin, cout)
-    t = task!(bt)
+    bt = BufferTask(cin, cout)
+    t = task!(s, bt)
     bt.task[] = t
     schedule(t)
 end
 
-function Base.schedule(btdl::BufferTaskDList)
+function Base.schedule(btdl::BufferTaskList; stdin=stdin, stdout=stdout)
     n = length(btdl.list)
     tl = Vector{Task}(undef, n)
     s = btdl.list[n]
-    cout = devnull
-    cin = n == 1 ? devnull : ChannelIO()
+    cout = stdout
+    cin = n == 1 ? stdin : ChannelIO()
     t = _schedule(s, cin, cout)
     tl[n] = t
     for i = n-1:-1:1
         s = btdl.list[i]
         cout = ChannelIO(cin.ch, :W)
-        cin = i == 1 ? devnull : ChannelIO()
+        cin = i == 1 ? stdin : ChannelIO()
         t = _schedule(s, cin, cout)
         tl[i] = t
     end
