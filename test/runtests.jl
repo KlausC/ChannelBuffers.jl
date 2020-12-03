@@ -31,8 +31,8 @@ end
 
 @testset "eof" begin
     @test_throws ArgumentError ChannelIO(:X)
-    @test (wio = ChannelIO(:W)) != nothing
-    @test ChannelIO(wio.ch) != nothing
+    @test (wio = ChannelIO(:W)) !== nothing
+    @test ChannelIO(wio.ch) !== nothing
     wio, rio = wrcha()
     @test bytesavailable(rio) == 0
     runclose(wio, WTIME)
