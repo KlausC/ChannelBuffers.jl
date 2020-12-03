@@ -71,11 +71,7 @@ function Base.schedule(btdl::BufferTaskDList)
 end
 
 function vopen(f, io::IO, arg)
-    try
-        f(io)
-    finally
-        close(io)
-    end
+    f(io)
 end
 function vopen(f, fn::AbstractString, arg)
     open(fn, arg) do io
@@ -134,8 +130,9 @@ function Gunzip()
             tc = GzipDecompressorStream(bt.cin)
             buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
             while !eof(tc)
-                readbytes!(tc, buffer)
-                write(bt.cout, buffer)
+                n = readbytes!(tc, buffer)
+                println(stdout, "read $n bytes: $(buffer[1:n])")
+                write(bt.cout, view(buffer, 1:n))
             end
         finally
             close(bt.cout)
