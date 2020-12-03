@@ -69,17 +69,6 @@ function Base.schedule(btdl::BufferTaskDList)
     tl    
 end
 
-function vopen(f, io::IO, arg)
-    f(io)
-end
-function vopen(f, fn::AbstractString, arg)
-    open(fn, arg) do io
-        f(io)
-    end
-end
-vopen(io::IO, arg) = io
-vopen(fn::AbstractString, arg) = open(fn, arg)
-
 using Tar
 using Downloads
 using CodecZlib
