@@ -35,12 +35,11 @@ end
     
 function task!(bt::BufferTask)
     function task_function()
-        vopen(bt.cin, "r") do cin
-            vopen(bt.cout, "w") do cout
-                bt.call.f(bt, bt.call.args...)
-            end
+        try
+            bt.call.f(bt, bt.call.args...)
+        finally
+            close(bt.cout)
         end
-        nothing
     end
     Task(task_function)
 end
@@ -93,49 +92,32 @@ const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
 function Tarc(dir::AbstractString)
     function _tarc(bt::BufferTask, dir::AbstractString)
-        try
-            Tar.create(dir, bt.cout)
-        finally
-            close(bt.cout)
-        end
+        Tar.create(dir, bt.cout)
     end
     BufferTaskDescription(_tarc, dir)
 end
 
 function Tarx(dir::AbstractString)
     function _tarx(bt::BufferTask, dir::AbstractString)
-        try
-            Tar.extract(bt.cin, dir)
-        finally
-            close(bt.cout)
-        end
+        Tar.extract(bt.cin, dir)
     end
     BufferTaskDescription(_tarx, dir)
 end
 
 function Download(url::AbstractString)
     function _download(bt::BufferTask, url::AbstractString)
-        try
-            Downloads.download(url, bt.cout)
-        finally
-            close(bt.cout)
-        end
+        Downloads.download(url, bt.cout)
     end
     BufferTaskDescription(_download, url)
 end
 
 function Gunzip()
     function _gunzip(bt::BufferTask)
-        try
-            tc = GzipDecompressorStream(bt.cin)
-            buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
-            while !eof(tc)
-                n = readbytes!(tc, buffer)
-                println(stdout, "read $n bytes: $(buffer[1:n])")
-                write(bt.cout, view(buffer, 1:n))
-            end
-        finally
-            close(bt.cout)
+        tc = GzipDecompressorStream(bt.cin)
+        buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
+        while !eof(tc)
+            n = readbytes!(tc, buffer)
+            write(bt.cout, view(buffer, 1:n))
         end
     end
     BufferTaskDescription(_gunzip)
@@ -143,15 +125,11 @@ end
 
 function Gzip()
     function _gzip(bt::BufferTask)
-        try
-            tc = GzipCompressorStream(bt.cin)
-            buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
-            while !eof(tc)
-                n = readbytes!(tc, buffer)
-                write(bt.cout, view(buffer, 1:n))
-            end
-        finally
-            close(bt.cout)
+        tc = GzipCompressorStream(bt.cin)
+        buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
+        while !eof(tc)
+            n = readbytes!(tc, buffer)
+            write(bt.cout, view(buffer, 1:n))
         end
     end
     BufferTaskDescription(_gzip)
@@ -159,7 +137,7 @@ end
 
 function Source(src::UIO)
     function _source(bt::BufferTask, src::UIO)
-        io = vopen(src, "r")
+        io = src isa IO ? src : io = open(src, "r")
         try
             buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
             while !eof(io)
@@ -167,7 +145,7 @@ function Source(src::UIO)
                 write(bt.cout, view(buffer, 1:n))
             end
         finally
-            close(io)
+            src isa IO || close(io)
         end
     end
     BufferTaskDescription(_source, src)
@@ -176,14 +154,15 @@ end
 function Destination(dst::UIO)
     function _destination(bt::BufferTask, dst::UIO)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
-        vopen(dst, "w") do io
+        io = dst isa IO ? dst : open(dst, "w")
+        try
             while !eof(bt.cin)
                 n = readbytes!(bt.cin, buffer)
                 write(io, view(buffer, 1:n))
             end
+        finally
+            dst isa IO || close(io)
         end
     end
     BufferTaskDescription(_destination, dst)
 end
-
-

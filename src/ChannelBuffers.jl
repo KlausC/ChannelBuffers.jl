@@ -180,9 +180,14 @@ function takebuffer!(cio::ChannelIO)
         cio.eofpending = true
         cio.woffset = 0
     else
-        cio.buffer = take!(cio.ch)
-        cio.woffset = length(cio.buffer)
-        cio.eofpending |= cio.woffset == 0
+        try
+            cio.buffer = take!(cio.ch)
+            cio.woffset = length(cio.buffer)
+            cio.eofpending |= cio.woffset == 0
+        catch
+            cio.woffset = 0
+            cio.eofpending = true
+        end
     end
     cio.roffset = 0
     cio.woffset
