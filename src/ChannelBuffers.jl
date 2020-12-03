@@ -26,11 +26,11 @@ end
 const DEFAULT_BUFFER_SIZE = 1024
 const DEFAULT_CHANNEL_LENGTH = 1
 
-function ChannelIO(ch::Channel, rw::Symbol=:R,bufsize::Integer=DEFAULT_BUFFER_SIZE)
+function ChannelIO(ch::Channel, rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, rw, zeros(UInt8, 0), bufsize)
 end
 
-function ChannelIO(rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
+function ChannelIO(rw::Symbol, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     T = Vector{UInt8}
     ch = Channel{T}(DEFAULT_CHANNEL_LENGTH)
     ChannelIO(ch, rw, bufsize)
@@ -38,6 +38,10 @@ end
 
 function ChannelIO(bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(:R, bufsize)
+end
+
+function Base.isopen(cio::ChannelIO)
+    isopen(cio.ch) || isready(cio.ch)
 end
 
 function throw_inv(cio::ChannelIO)
