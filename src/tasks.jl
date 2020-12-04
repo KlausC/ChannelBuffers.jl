@@ -2,13 +2,15 @@
 struct BClosure{F<:Function,Args<:Tuple}
     f::F
     args::Args
-    BClosure(f::F, args...) where F = new{F,typeof(args)}(f, args) 
 end
 
 const UIO = Union{IO,AbstractString}
 
 struct BClosureList
     list::Vector{<:BClosure}
+end
+struct BTaskList
+    list::Vector{<:Task}
 end
 
 import Base: |
@@ -18,7 +20,16 @@ end
 function |(src::BClosureList, btd::BClosure)
     BClosureList(vcat(src.list, btd))
 end
-    
+
+function Base.wait(tv::BTaskList)
+    if length(tv.list) > 0
+        wait(last(tv.list))
+    end
+end
+Base.length(tv::BTaskList) = length(tv.list)
+Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
+Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
+
 function task!(btd::BClosure, cin, cout)
     function task_function()
         try
@@ -35,6 +46,8 @@ function _schedule(s, cin, cout)
     schedule(t)
 end
 
+Base.schedule(bt::BClosure; stdin=stdin, stdout=stdout) = schedule(BClosureList([bt]); stdin, stdout)
+
 function Base.schedule(btdl::BClosureList; stdin=stdin, stdout=stdout)
     n = length(btdl.list)
     tl = Vector{Task}(undef, n)
@@ -50,7 +63,7 @@ function Base.schedule(btdl::BClosureList; stdin=stdin, stdout=stdout)
         t = _schedule(s, cin, cout)
         tl[i] = t
     end
-    tl    
+    BTaskList(tl)    
 end
 
 using Tar
@@ -64,25 +77,36 @@ export Destination, Tarx
 
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
+"""
+    closure(f::Function, args...)
+
+Generate a `BClosure` object, which can be used to be started in parallel.
+The function `f` must have the signature `f(cin::IO, cout::IO [, args...])`.
+It is wrapped in an argumentless closure to be used in a `Task` definition.
+"""
+function closure(f::Function, args...)
+    BClosure(f, args)
+end
+
 function Tarc(dir::AbstractString)
     function _tarc(cin::IO,cout::IO, dir::AbstractString)
         Tar.create(dir, cout)
     end
-    BClosure(_tarc, dir)
+    closure(_tarc, dir)
 end
 
 function Tarx(dir::AbstractString)
-    function _tarx(cio::IO, cout::IO, dir::AbstractString)
+    function _tarx(cin::IO, cout::IO, dir::AbstractString)
         Tar.extract(cin, dir)
     end
-    BClosure(_tarx, dir)
+    closure(_tarx, dir)
 end
 
 function Download(url::AbstractString)
     function _download(cin::IO, cout::IO, url::AbstractString)
         Downloads.download(url, cout)
     end
-    BClosure(_download, url)
+    closure(_download, url)
 end
 
 function Gunzip()
@@ -94,7 +118,7 @@ function Gunzip()
             write(cout, view(buffer, 1:n))
         end
     end
-    BClosure(_gunzip)
+    closure(_gunzip)
 end
 
 function Gzip()
@@ -106,7 +130,7 @@ function Gzip()
             write(cout, view(buffer, 1:n))
         end
     end
-    BClosure(_gzip)
+    closure(_gzip)
 end
 
 function Transcode(codec::Codec)
@@ -121,7 +145,7 @@ function Transcode(codec::Codec)
         flush(cout)
         TranscodingStreams.finalize(codec)
     end
-    BClosure(_transcode)
+    closure(_transcode)
 end   
 
 function Source(src::UIO)
@@ -137,7 +161,7 @@ function Source(src::UIO)
             src isa IO || close(io)
         end
     end
-    BClosure(_source, src)
+    closure(_source, src)
 end
 
 function Destination(dst::UIO)
@@ -153,5 +177,5 @@ function Destination(dst::UIO)
             dst isa IO || close(io)
         end
     end
-    BClosure(_destination, dst)
+    closure(_destination, dst)
 end

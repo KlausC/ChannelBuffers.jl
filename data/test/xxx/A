@@ -1,0 +1,365 @@
+
+sreffuBlennahC eludom
+
+OIlennahC tropxe
+
+"""
+OIlennahC    
+
+gnisu meht tropsnart lluf/ytpme era sreffub fI .`maertSOI` na ekil nettirw dna daer sI
+.gninilepip ksat lellarap gniwolla slennahc
+"""
+OI :< }}8tnIU{rotceVtcartsbA:<T{OIlennahC tcurts elbatum
+}T{lennahC::hc    
+ylnoetirw W: ylnodaer R: # lobmyS::wr    
+T::reffub    
+tnIU::ezisfub    
+tnIU::tesffow    
+tnIU::tesffor    
+looB::gnidnepfoe    
+V erehw )regetnI::ezisfub ,V::reffub ,lobmyS::wr ,lennahC::hc(OIlennahC noitcnuf    
+))"ezisfub$ si ezis reffub laminim"(rorrEtnemugrA(worht || 0 > ezisfub        
+))"W: ro R: eb tsum etirw/daer"(rorrEtnemugrA(worht || W: == wr || R: == wr        
+)eslaf ,0 ,0 ,ezisfub ,reffub ,wr ,hc(}V{wen        
+dne    
+dne
+
+2918 = EZIS_REFFUB_TLUAFED tsnoc
+1 = HTGNEL_LENNAHC_TLUAFED tsnoc
+
+)EZIS_REFFUB_TLUAFED=regetnI::ezisfub ,R:=lobmyS::wr ,lennahC::hc(OIlennahC noitcnuf
+)ezisfub ,)0 ,8tnIU(sorez ,wr ,hc(OIlennahC    
+dne
+
+)EZIS_REFFUB_TLUAFED=regetnI::ezisfub ,lobmyS::wr(OIlennahC noitcnuf
+}8tnIU{rotceV = T    
+)HTGNEL_LENNAHC_TLUAFED(}T{lennahC = hc    
+)ezisfub ,wr ,hc(OIlennahC    
+dne
+
+)EZIS_REFFUB_TLUAFED=regetnI::ezisfub(OIlennahC noitcnuf
+)ezisfub ,R:(OIlennahC    
+dne
+
+)OIlennahC::oic(neposi.esaB noitcnuf
+)hc.oic(ydaersi || )hc.oic(neposi    
+dne
+
+)OIlennahC::oic(vni_worht noitcnuf
+))wr.oic ,"ylno-)wr.oic($ si lennahc"(noitpecxEetatSdilavnI(worht    
+dne
+
+)tnIU::nn ,}8tnIU{rtP::pp ,OIlennahC::oic(etirw_efasnu.esaB noitcnuf
+)oic(vni_worht && R: == wr.oic    
+tesffow.oic = k    
+ezisfub.oic < )reffub.oic(htgnel fi    
+)ezisfub.oic ,reffub.oic(!eziser        
+dne    
+)1+k ,reffub.oic(retniop = d    
+pp = s    
+nn = n    
+ezisfub.oic => k + n elihw    
+k - ezisfub.oic = i        
+)i ,s ,d(!otypoc_efasnu        
+)reffub.oic ,hc.oic(!tup        
+)oic(reffubteg = reffub.oic        
+)1 ,reffub.oic(retniop = d        
+0 = tesffow.oic        
+0 = k        
+i =- n        
+i =+ s        
+dne    
+0 > n fi    
+)n ,s ,d(!otypoc_efasnu        
+n =+ tesffow.oic        
+dne    
+)nn(tnI    
+dne
+
+)OIlennahC::oic(hsulf.esaB noitcnuf
+)eslaf ,oic(hsulf_    
+dne
+
+)looB::dnesfoe ,OIlennahC::oic(hsulf_ noitcnuf
+gnihton nruter && R: == wr.oic    
+nruter && dnesfoe! && 0 == tesffow.oic    
+)tesffow.oic ,reffub.oic(!eziser    
+)reffub.oic ,hc.oic(!tup    
+)oic(reffubteg = reffub.oic    
+0 = tesffow.oic    
+0 = tesffor.oic    
+gnihton    
+dne
+
+)OIlennahC::oic(esolc.esaB noitcnuf
+)eurt ,oic(hsulf_    
+0 = ezisfub.oic    
+)hc.oic(esolc    
+gnihton    
+dne
+
+)tnIU::nn ,}8tnIU{rtP::pp ,OIlennahC::oic(daer_efasnu.esaB noitcnuf
+)oic(vni_worht || R: ==  wr.oic    
+pp = p    
+nn = n    
+)oic(foe! && 0 > n elihw    
+tesffor.oic - tesffow.oic = k        
+)1 + tesffor.oic ,reffub.oic(retniop = s        
+)n ,k(nim = i        
+)i ,s ,p(!otypoc_efasnu        
+i =- k        
+i =- n        
+i =+ p        
+i =+ tesffor.oic        
+dne    
+)n - nn(tnI    
+dne
+
+)OIlennahC::oic(keep.esaB noitcnuf
+)oic(vni_worht || R: ==  wr.oic    
+))(rorrEFOE(worht && )oic(foe    
+]1 + tesffor.oic[reffub.oic    
+dne
+)}8tnIU{epyT:: ,OIlennahC::oic(daer.esaB noitcnuf
+)oic(vni_worht || R: == wr.oic    
+))(rorrEFOE(worht && )oic(foe    
+]1 =+ tesffor.oic[reffub.oic = c    
+dne
+
+)OIlennahC::oic(elbaliavasetyb.esaB noitcnuf
+)oic(vni_worht || R: ==  wr.oic    
+tesffor.oic - tesffow.oic = n    
+0 > n fi    
+)n(tnI nruter        
+esle    
+0 nruter && gnidnepfoe.oic        
+0 = tesffow.oic        
+0 = tesffor.oic        
+dne    
+)hc.oic(ydaersi fi    
+)oic(!reffubekat        
+dne    
+)tesffow.oic(tnI    
+dne
+
+)OIlennahC::oic(foe.esaB noitcnuf
+)oic(vni_worht || R: ==  wr.oic    
+eslaf nruter && tesffow.oic < tesffor.oic    
+)oic(!reffubekat    
+tesffow.oic => tesffor.oic && gnidnepfoe.oic nruter    
+dne
+
+)eurt=looB::lla ;)b(htgnel=bn ,}8tnIU{rotceV::b ,OIlennahC::oic(!setybdaer.esaB noitcnuf
+)oic(elbaliavasetyb = s    
+)bn ,s(nim = n    
+)b(htgnel > n fi    
+)n ,b(!eziser        
+dne    
+)n ,)1 ,b(retniop ,oic(daer_efasnu.esaB = r    
+bn => r || lla! fi    
+)r(tnI nruter        
+dne    
+)oic(foe! && bn < r elihw    
+)4201 + r ,bn(nim = n        
+)b(htgnel > n fi        
+)n ,b(!eziser            
+dne        
+)1 + r ,b(retniop = d        
+)r - n ,d ,oic(daer_efasnu.esaB = k        
+k =+ r        
+dne    
+)r(tnI nruter    
+dne
+
+)OIlennahC::oic(reffubteg noitcnuf
+)ezisfub.oic ,fednu(}8tnIU{rotceV#    
+)ezisfub.oic ,8tnIU(sorez    
+dne
+
+)OIlennahC::oic(!reffubekat noitcnuf
+)hc.oic(ydaersi! && )hc.oic(neposi! fi    
+eurt = gnidnepfoe.oic        
+0 = tesffow.oic        
+esle    
+yrt        
+)hc.oic(!ekat = reffub.oic            
+)reffub.oic(htgnel = tesffow.oic            
+0 == tesffow.oic =| gnidnepfoe.oic            
+hctac        
+0 = tesffow.oic            
+eurt = gnidnepfoe.oic            
+dne        
+dne    
+0 = tesffor.oic    
+tesffow.oic    
+dne
+
+}elpuT:<sgrA,noitcnuF:<F{erusolCB tcurts
+F::f    
+sgrA::sgra    
+ )sgra ,f(})sgra(foepyt,F{wen = F erehw )...sgra ,F::f(erusolCB    
+dne
+
+}gnirtStcartsbA,OI{noinU = OIU tsnoc
+
+tsiLerusolCB tcurts
+}erusolCB:<{rotceV::tsil    
+dne
+tsiLksaTB tcurts
+}ksaT:<{rotceV::tsil    
+dne
+
+| :esaB tropmi
+)erusolCB::dtb ,erusolCB::crs(| noitcnuf
+)]dtb ,crs[(tsiLerusolCB    
+dne
+)erusolCB::dtb ,tsiLerusolCB::crs(| noitcnuf
+))dtb ,tsil.crs(tacv(tsiLerusolCB    
+dne
+
+)tsiLksaTB::vt(tiaw.esaB noitcnuf
+0 > )tsil.vt(htgnel fi    
+))tsil.vt(tsal(tiaw        
+dne    
+dne
+)tsil.vt(htgnel = )tsiLksaTB::vt(htgnel.esaB
+)i ,tsil.vt(xedniteg = )i ,tsiLksaTB::vt(xedniteg.esaB
+)tsil.vt ,m ,oi(wohs = )tsiLksaTB::vt ,"nialp/txet"EMIM::m ,OI::oi(wohs.esaB
+
+)tuoc ,nic ,erusolCB::dtb(!ksat noitcnuf
+)(noitcnuf_ksat noitcnuf    
+yrt        
+)...sgra.dtb ,tuoc ,nic(f.dtb            
+yllanif        
+)tuoc(esolc && OIlennahC asi tuoc            
+dne        
+dne    
+)noitcnuf_ksat(ksaT    
+dne
+
+)tuoc ,nic ,s(eludehcs_ noitcnuf
+)tuoc ,nic ,s(!ksat = t    
+)t(eludehcs    
+dne
+
+)tuodts=tuodts ,nidts=nidts ;tsiLerusolCB::ldtb(eludehcs.esaB noitcnuf
+)tsil.ldtb(htgnel = n    
+)n ,fednu(}ksaT{rotceV = lt    
+]n[tsil.ldtb = s    
+tuodts = tuoc    
+)(OIlennahC : nidts ? 1 == n = nic    
+)tuoc ,nic ,s(eludehcs_ = t    
+t = ]n[lt    
+1:1-:1-n = i rof    
+]i[tsil.ldtb = s        
+)W: ,hc.nic(OIlennahC = tuoc        
+)(OIlennahC : nidts ? 1 == i = nic        
+)tuoc ,nic ,s(eludehcs_ = t        
+t = ]i[lt        
+dne    
+    )lt(tsiLksaTB    
+dne
+
+raT gnisu
+sdaolnwoD gnisu
+bilZcedoC ,smaertSgnidocsnarT gnisu
+cedoC.smaertSgnidocsnarT tropmi
+
+daolnwoD ,craT ,ecruoS tropxe
+piznuG ,pizG ,edocsnarT tropxe
+xraT ,noitanitseD tropxe
+
+EZIS_REFFUB_TLUAFED = EZIS_REFFUB_DAER_TLUAFED tsnoc
+
+)gnirtStcartsbA::rid(craT noitcnuf
+)gnirtStcartsbA::rid ,OI::tuoc,OI::nic(crat_ noitcnuf    
+)tuoc ,rid(etaerc.raT        
+dne    
+)rid ,crat_(erusolCB    
+dne
+
+)gnirtStcartsbA::rid(xraT noitcnuf
+)gnirtStcartsbA::rid ,OI::tuoc ,OI::oic(xrat_ noitcnuf    
+)rid ,nic(tcartxe.raT        
+dne    
+)rid ,xrat_(erusolCB    
+dne
+
+)gnirtStcartsbA::lru(daolnwoD noitcnuf
+)gnirtStcartsbA::lru ,OI::tuoc ,OI::nic(daolnwod_ noitcnuf    
+)tuoc ,lru(daolnwod.sdaolnwoD        
+dne    
+)lru ,daolnwod_(erusolCB    
+dne
+
+)(piznuG noitcnuf
+)OI::tuoc ,OI::nic(piznug_ noitcnuf    
+)nic(maertSrosserpmoceDpizG = ct        
+)EZIS_REFFUB_DAER_TLUAFED ,fednu(}8tnIU{rotceV = reffub        
+)ct(foe! elihw        
+)reffub ,ct(!setybdaer = n            
+))n:1 ,reffub(weiv ,tuoc(etirw            
+dne        
+dne    
+)piznug_(erusolCB    
+dne
+
+)(pizG noitcnuf
+)OI::tuoc ,OI::nic(pizg_ noitcnuf    
+)nic(maertSrosserpmoCpizG = ct        
+)EZIS_REFFUB_DAER_TLUAFED ,fednu(}8tnIU{rotceV = reffub        
+)ct(foe! elihw        
+)reffub ,ct(!setybdaer = n            
+))n:1 ,reffub(weiv ,tuoc(etirw            
+dne        
+dne    
+)pizg_(erusolCB    
+dne
+
+)cedoC::cedoc(edocsnarT noitcnuf
+)OI::tuoc ,OI::nic(edocsnart_ noitcnuf    
+)01 * EZIS_REFFUB_DAER_TLUAFED ,fednu(}8tnIU{rotceV = reffub        
+)cedoc(ezilaitini.smaertSgnidocsnarT        
+)nic(foe! elihw        
+)reffub ,nic(!setybdaer = n            
+)]n:1[reffub ,cedoc(edocsnart = r            
+)r ,tuoc(etirw            
+dne        
+)tuoc(hsulf        
+)cedoc(ezilanif.smaertSgnidocsnarT        
+dne    
+)edocsnart_(erusolCB    
+   dne
+
+)OIU::crs(ecruoS noitcnuf
+)OIU::crs ,OI::tuoc ,OI::nic(ecruos_ noitcnuf    
+)"r" ,crs(nepo = oi : crs ? OI asi crs = oi        
+yrt        
+)EZIS_REFFUB_DAER_TLUAFED ,fednu(}8tnIU{rotceV = reffub            
+)oi(foe! elihw            
+)reffub ,oi(!setybdaer = n                
+))n:1 ,reffub(weiv ,tuoc(etirw                
+dne            
+yllanif        
+)oi(esolc || OI asi crs            
+dne        
+dne    
+)crs ,ecruos_(erusolCB    
+dne
+
+)OIU::tsd(noitanitseD noitcnuf
+)OIU::tsd ,OI::tuoc ,OI::nic(noitanitsed_ noitcnuf    
+)EZIS_REFFUB_DAER_TLUAFED ,fednu(}8tnIU{rotceV = reffub        
+)"w" ,tsd(nepo : tsd ? OI asi tsd = oi        
+yrt        
+)nic(foe! elihw            
+)reffub ,nic(!setybdaer = n                
+))n:1 ,reffub(weiv ,oi(etirw                
+dne            
+yllanif        
+)oi(esolc || OI asi tsd            
+dne        
+dne    
+)tsd ,noitanitsed_(erusolCB    
+dne
+eludom # dne
