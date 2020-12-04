@@ -30,7 +30,7 @@ Base.length(tv::BTaskList) = length(tv.list)
 Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
 Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
 
-function task!(btd::BClosure, cin, cout)
+function _schedule(btd::BClosure, cin, cout)
     function task_function()
         try
             btd.f(cin, cout, btd.args...)
@@ -38,15 +38,22 @@ function task!(btd::BClosure, cin, cout)
             cout isa ChannelIO && close(cout)
         end
     end
-    Task(task_function)
+    # schedule(Task(task_function))
+    Threads.@spawn task_function()
 end
 
-function _schedule(s, cin, cout)
-    t = task!(s, cin, cout)
-    schedule(t)
-end
+"""
+    getcode
 
-Base.schedule(bt::BClosure; stdin=stdin, stdout=stdout) = schedule(BClosureList([bt]); stdin, stdout)
+Access the argumentless function provided to the task
+"""
+getcode(t::Task) = t.code.task_function
+getcin(t::Task) = getcode(t).cin
+getcout(t::Task) = getcode(t).cout
+
+function Base.schedule(bt::BClosure; stdin=stdin, stdout=stdout)
+    schedule(BClosureList([bt]); stdin, stdout)
+end
 
 function Base.schedule(btdl::BClosureList; stdin=stdin, stdout=stdout)
     n = length(btdl.list)
