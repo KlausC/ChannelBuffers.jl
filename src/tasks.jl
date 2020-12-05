@@ -68,13 +68,17 @@ Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
 Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
 
 """
-    getcode
+    task_code, task_cin, task_cout, task_function, task_args
 
 Access the argumentless function provided to the task
 """
-getcode(t::Task) = t.code.task_function
-getcin(t::Task) = getcode(t).cin
-getcout(t::Task) = getcode(t).cout
+function task_code(t::Task)
+    isdefined(t.code, :task_function) ? t.code.task_function : t.code
+end
+task_cin(t::Task) = task_code(t).cin
+task_cout(t::Task) = task_code(t).cout
+task_function(t::Task) = task_code(t).btd.f
+task_args(t::Task) = task_code(t).btd.args
 
 """
     run(BClosure; stdin=stdin, stdout=stdout)
