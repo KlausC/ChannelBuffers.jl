@@ -47,7 +47,7 @@ end
 
 @testset "downloads and output redirection" begin
     open(joinpath(TDIR, "xxx3.tgz"), "w") do io
-        wait(run(curl("file://" * TDIR * "/xxx.tgz"), stdout=io))   
+        wait(run(curl("file://" * TDIR * "/xxx.tgz") > io))
     end
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx3.tgz"`
     @test run(fc) !== nothing
@@ -55,7 +55,7 @@ end
 
 @testset "destination and input redirection" begin
     open(joinpath(TDIR, "xxx.tgz"), "r") do io
-        wait(run(destination(joinpath(TDIR, "xxx4.tgz")) < io))   
+        wait(run(destination(joinpath(TDIR, "xxx4.tgz")) < io))
     end
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx4.tgz"`
     @test run(fc) !== nothing

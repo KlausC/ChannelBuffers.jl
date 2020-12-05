@@ -35,7 +35,7 @@ import Base: |, <, >
 <(list::BClosure, cin::IO) = BClosureList([list], cin, stdout)
 
 >(list::BClosureList, cout::IO) = BClosureList(list.list, list.cin, cout)
->(list::BClosure, cout::IO) = BClosureList(list.list, stdin, cout)
+>(list::BClosure, cout::IO) = BClosureList([list], stdin, cout)
 
 function Base.pipeline(src::BClosure, other::BClosure...; stdin=stdin, stdout=stdout)
     BClosureList([src; other...], stdin, stdout)
