@@ -6,4 +6,4 @@ using TranscodingStreams, CodecZlib
 
 @testset "tasks" begin include("tasks.jl") end
 
-@testset "ChannelIO" begin include("ChannelIO.jl") end
+@testset "ChannelIO" begin include("channelIO.jl") end
