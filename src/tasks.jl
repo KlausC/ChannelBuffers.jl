@@ -55,20 +55,7 @@ Base.length(tv::BTaskList) = length(tv.list)
 Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
 Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
 
-function _schedule(btd::BClosure, cin, cout)
-    function task_function()
-        try
-            btd.f(cin, cout, btd.args...)
-        finally
-            cout isa ChannelIO && close(cout)
-        end
-    end
-    if Threads.nthreads() <= 1 || Threads.threadid() != 1
-        schedule(Task(task_function))
-    else
-        Threads.@spawn task_function()
-    end
-end
+
 
 """
     getcode
@@ -105,7 +92,7 @@ function Base.run(btdl::BClosureList)
     tl[n] = t
     for i = n-1:-1:1
         s = btdl.list[i]
-        cout = ChannelIO(cin.ch, :W)
+        cout = reverseof(cin)
         cin = i == 1 ? stdin : ChannelIO()
         t = _schedule(s, cin, cout)
         tl[i] = t
@@ -122,4 +109,20 @@ It may be wrapped in an argumentless closure to be used in a `Task` definition.
 """
 function closure(f::Function, args...)
     BClosure(f, args)
+end
+
+# schedule single task
+function _schedule(btd::BClosure, cin, cout)
+    function task_function()
+        try
+            btd.f(cin, cout, btd.args...)
+        finally
+            cout isa ChannelIO && close(cout)
+        end
+    end
+    if Threads.nthreads() <= 1 || Threads.threadid() != 1
+        schedule(Task(task_function))
+    else
+        Threads.@spawn task_function()
+    end
 end

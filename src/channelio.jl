@@ -18,7 +18,7 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
         new{V}(ch, rw, buffer, bufsize, 0, 0, false)
     end
 end
-
+ 
 const DEFAULT_BUFFER_SIZE = 8192
 const DEFAULT_CHANNEL_LENGTH = 1
 
@@ -34,6 +34,12 @@ end
 
 function ChannelIO(bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(:R, bufsize)
+end
+
+# create ChannelIO with smae channel and reverse read/write indicator
+function reverseof(cio::ChannelIO)
+    rev = cio.rw == :R ? :W : :R
+    ChannelIO(cio.ch, rev, cio.bufsize)
 end
 
 function Base.isopen(cio::ChannelIO)

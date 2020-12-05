@@ -5,8 +5,8 @@ const TDIR = mktempdir(cleanup=false)
 println("testing tmpdir is $TDIR")
 
 @testset "tar -c" begin
-    tarc = Tarc(joinpath(DDIR, "xxx")) | Gzip() | Destination(joinpath(TDIR, "xxx.tgz"))
-    tl = run(tarc)
+    tar = tarc(joinpath(DDIR, "xxx")) | gzip() | destination(joinpath(TDIR, "xxx.tgz"))
+    tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
     @test all(istaskstarted.(tl.list))
@@ -14,8 +14,8 @@ println("testing tmpdir is $TDIR")
 end
 
 @testset "tar -c using pipeline" begin
-tarc = pipeline(Tarc(joinpath(DDIR, "xxx")), Gzip(); stdout = open(joinpath(TDIR, "xxx.tgz"), "w"))
-tl = run(tarc)
+tar = pipeline(tarc(joinpath(DDIR, "xxx")), gzip(); stdout = open(joinpath(TDIR, "xxx.tgz"), "w"))
+tl = run(tar)
 @test length(tl) == 2
 @test wait(tl) === nothing
 @test all(istaskstarted.(tl.list))
@@ -23,8 +23,8 @@ tl = run(tarc)
 end
 
 @testset "tar -x" begin
-    tarc = Source(joinpath(TDIR, "xxx.tgz")) | Transcode(GzipDecompressor()) | Tarx(joinpath(TDIR, "xxx"))
-    tl = run(tarc)
+    tar = source(joinpath(TDIR, "xxx.tgz")) | transcoder(GzipDecompressor()) | tarx(joinpath(TDIR, "xxx"))
+    tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
     @test all(istaskstarted.(tl.list))
@@ -35,7 +35,7 @@ end
 end
 
 @testset "copy file" begin
-    cpy = Source(joinpath(TDIR, "xxx.tgz")) | Destination(joinpath(TDIR, "xxx2.tgz"))
+    cpy = source(joinpath(TDIR, "xxx.tgz")) | destination(joinpath(TDIR, "xxx2.tgz"))
     tl = run(cpy)
     @test length(tl) == 2
     @test wait(tl) === nothing
@@ -47,7 +47,7 @@ end
 
 @testset "downloads and output redirection" begin
     open(joinpath(TDIR, "xxx3.tgz"), "w") do io
-        wait(run(Download("file://" * TDIR * "/xxx.tgz"), stdout=io))   
+        wait(run(curl("file://" * TDIR * "/xxx.tgz"), stdout=io))   
     end
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx3.tgz"`
     @test run(fc) !== nothing
@@ -55,7 +55,7 @@ end
 
 @testset "destination and input redirection" begin
     open(joinpath(TDIR, "xxx.tgz"), "r") do io
-        wait(run(Destination(joinpath(TDIR, "xxx4.tgz")) < io))   
+        wait(run(destination(joinpath(TDIR, "xxx4.tgz")) < io))   
     end
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx4.tgz"`
     @test run(fc) !== nothing

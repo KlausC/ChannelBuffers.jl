@@ -1,36 +1,30 @@
 using Tar
 using Downloads
 using TranscodingStreams, CodecZlib
-import TranscodingStreams.Codec
 
-export Source, Tarc, Download
-export Transcode, Gzip, Gunzip
-export Destination, Tarx
+export source, destination
+export curl
+export transcoder, gzip, gunzip
+export tarc, tarx
 
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
-function Tarc(dir::AbstractString)
-    function _tarc(cin::IO,cout::IO, dir::AbstractString)
-        Tar.create(dir, cout)
-    end
+function tarc(dir::AbstractString)
+    _tarc(cin::IO,cout::IO, dir::AbstractString) = Tar.create(dir, cout)
     closure(_tarc, dir)
 end
 
-function Tarx(dir::AbstractString)
-    function _tarx(cin::IO, cout::IO, dir::AbstractString)
-        Tar.extract(cin, dir)
-    end
+function tarx(dir::AbstractString)
+    _tarx(cin::IO, cout::IO, dir::AbstractString) = Tar.extract(cin, dir)
     closure(_tarx, dir)
 end
 
-function Download(url::AbstractString)
-    function _download(cin::IO, cout::IO, url::AbstractString)
-        Downloads.download(url, cout)
-    end
-    closure(_download, url)
+function curl(url::AbstractString)
+    _curl(cin::IO, cout::IO, url::AbstractString) = Downloads.download(url, cout)
+    closure(_curl, url)
 end
 
-function Gunzip()
+function gunzip()
     function _gunzip(cin::IO, cout::IO)
         tc = GzipDecompressorStream(cin)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
@@ -42,7 +36,7 @@ function Gunzip()
     closure(_gunzip)
 end
 
-function Gzip()
+function gzip()
     function _gzip(cin::IO, cout::IO)
         tc = GzipCompressorStream(cin)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
@@ -54,8 +48,8 @@ function Gzip()
     closure(_gzip)
 end
 
-function Transcode(codec::Codec)
-    function _transcode(cin::IO, cout::IO)
+function transcoder(codec::TranscodingStreams.Codec)
+    function _transcoder(cin::IO, cout::IO)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE * 10)
         TranscodingStreams.initialize(codec)
         while !eof(cin)
@@ -66,10 +60,10 @@ function Transcode(codec::Codec)
         flush(cout)
         TranscodingStreams.finalize(codec)
     end
-    closure(_transcode)
+    closure(_transcoder)
 end   
 
-function Source(src::UIO)
+function source(src::UIO)
     function _source(cin::IO, cout::IO, src::UIO)
         io = src isa IO ? src : io = open(src, "r")
         try
@@ -85,7 +79,7 @@ function Source(src::UIO)
     closure(_source, src)
 end
 
-function Destination(dst::UIO)
+function destination(dst::UIO)
     function _destination(cin::IO, cout::IO, dst::UIO)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
         io = dst isa IO ? dst : open(dst, "w")
