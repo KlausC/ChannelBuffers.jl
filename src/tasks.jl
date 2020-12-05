@@ -1,26 +1,51 @@
 
+"""
+    BClosure(f::function, args)
+
+Store function and arguments. The signature of the function must
+be like `f(cin::IO, cout::IO, args...)`.
+"""
 struct BClosure{F<:Function,Args<:Tuple}
     f::F
     args::Args
 end
 
+# used for output redirection
 const UIO = Union{IO,AbstractString}
 
-struct BClosureList
+# List of BClosure objects an io redirections
+struct BClosureList{In,Out}
     list::Vector{<:BClosure}
+    cin::In
+    cout::Out
+    BClosureList(list, cin::In, cout::Out) where {In,Out} = new{In,Out}(list, cin, cout)
 end
+BClosureList(list) = BClosureList(list, stdin, stdout)
+
+# List of tasks - output of `schedule`
 struct BTaskList
     list::Vector{<:Task}
 end
 
-import Base: |
-function |(src::BClosure, btd::BClosure)
-    BClosureList([src, btd])
-end
-function |(src::BClosureList, btd::BClosure)
-    BClosureList(vcat(src.list, btd))
+import Base: |, <, >
+|(src::BClosureList, btd::BClosure) = BClosureList(vcat(src.list, btd))
+|(src::BClosure, btd::BClosure) = BClosureList([src, btd])
+
+<(list::BClosureList, cin::IO) = BClosureList(list.list, cin, list.cout)
+<(list::BClosure, cin::IO) = BClosureList([list], cin, stdout)
+
+>(list::BClosureList, cout::IO) = BClosureList(list.list, list.cin, cout)
+>(list::BClosure, cout::IO) = BClosureList(list.list, stdin, cout)
+
+function Base.pipeline(src::BClosure, other::BClosure...; stdin=stdin, stdout=stdout)
+    BClosureList([src; other...], stdin, stdout)
 end
 
+"""
+    wait(tl::BTaskList)
+
+Wait for the last task in the list to finish.
+"""
 function Base.wait(tv::BTaskList)
     if length(tv.list) > 0
         wait(last(tv.list))
@@ -38,8 +63,11 @@ function _schedule(btd::BClosure, cin, cout)
             cout isa ChannelIO && close(cout)
         end
     end
-    # schedule(Task(task_function))
-    Threads.@spawn task_function()
+    if Threads.nthreads() <= 1 || Threads.threadid() != 1
+        schedule(Task(task_function))
+    else
+        Threads.@spawn task_function()
+    end
 end
 
 """
@@ -51,11 +79,23 @@ getcode(t::Task) = t.code.task_function
 getcin(t::Task) = getcode(t).cin
 getcout(t::Task) = getcode(t).cout
 
-function Base.schedule(bt::BClosure; stdin=stdin, stdout=stdout)
-    schedule(BClosureList([bt]); stdin, stdout)
+"""
+    run(BClosure; stdin=stdin, stdout=stdout)
+
+Start parallel task redirecting stdin and stdout
+"""
+function Base.run(bt::BClosure; stdin=stdin, stdout=stdout)
+    run(BClosureList([bt], stdin, stdout))
 end
 
-function Base.schedule(btdl::BClosureList; stdin=stdin, stdout=stdout)
+"""
+    run(::BClosureList)
+
+Start all parallel tasks defined in list, io redirection defaults are defined in the list
+"""
+function Base.run(btdl::BClosureList)
+    stdin = btdl.cin
+    stdout = btdl.cout
     n = length(btdl.list)
     tl = Vector{Task}(undef, n)
     s = btdl.list[n]
