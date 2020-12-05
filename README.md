@@ -56,7 +56,7 @@ It can be transformed into a `BClosure` object
         fc = closure(f, args...)::BClosure
 ```
 
-which can be run allone or combined with other closures and input/output specifiers.
+which can be run alone or combined with other closures and input/output specifiers.
 The following `Base` functions are redefined.
 
 ``` julia
@@ -90,3 +90,6 @@ If the last task in the pipeline calculates a value, if can be waited for and ob
 ```
 
 Both `wait` and `fetch` throw `TaskFailedException` if the last task in the list failed.
+
+Element type of `BTaskList` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
+methods, like `wait`, `fetch`, `istask...`.
