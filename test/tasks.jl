@@ -4,6 +4,14 @@ const TDIR = mktempdir(cleanup=false)
 
 println("testing tmpdir is $TDIR")
 
+@testset "serialize and deserialize" begin
+    obj = ["hans", 42]
+    tl = run(serializer(obj) | deserializer())
+    @test fetch(tl) == obj
+    tl = run(serializer(obj) | gzip() | deserializer())
+    @test_throws TaskFailedException fetch(tl)
+end
+
 @testset "tar -c" begin
     tar = tarc(joinpath(DDIR, "xxx")) | gzip() | destination(joinpath(TDIR, "xxx.tgz"))
     tl = run(tar)

@@ -1,11 +1,13 @@
 using Tar
 using Downloads
 using TranscodingStreams, CodecZlib
+using Serialization
 
 export source, destination
 export curl
-export transcoder, gzip, gunzip
+export transcoder, gunzip, gzip
 export tarc, tarx
+export serializer, deserializer
 
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
@@ -93,4 +95,14 @@ function destination(dst::UIO)
         end
     end
     closure(_destination, dst)
+end
+
+function serializer(obj::Any)
+    _serializer(cin::IO, cout::IO, obj::Any) = Serialization.serialize(cout, obj)
+    closure(_serializer, obj)
+end
+
+function deserializer()
+    _deserializer(cin::IO, cout::IO) = Serialization.deserialize(cin)
+    closure(_deserializer)
 end

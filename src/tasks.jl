@@ -51,11 +51,21 @@ function Base.wait(tv::BTaskList)
         wait(last(tv.list))
     end
 end
+
+"""
+    fetch(tl::BTaskList)
+
+Wait for last Task in to finish, then return its result value.
+If the task fails with an exception, a `TaskFailedException` (which wraps the failed task) is thrown.
+"""
+function Base.fetch(tv::BTaskList)
+    length(tv.list) > 0 || throw(ArgumentError("cannot fetch from empty task list"))
+    fetch(last(tv.list))
+end
+
 Base.length(tv::BTaskList) = length(tv.list)
 Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
 Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
-
-
 
 """
     getcode

@@ -50,8 +50,21 @@ function throw_inv(cio::ChannelIO)
     throw(InvalidStateException("channel is $(cio.rw)-only", cio.rw))
 end
 
+function Base.write(cio::ChannelIO, byte::UInt8)
+    cio.rw == :W || throw_inv(cio)
+    n = length(cio.buffer)
+    if cio.woffset >= n
+        resize!(cio.buffer, max(cio.woffset, cio.bufsize))
+    end
+    cio.woffset += 1
+    cio.buffer[cio.woffset] = byte
+    if cio.woffset > cio.bufsize
+        _flush(cio, false)
+    end
+end
+
 function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    cio.rw == :R && throw_inv(cio)
+    cio.rw == :W || throw_inv(cio)
     k = cio.woffset
     if length(cio.buffer) < cio.bufsize
         resize!(cio.buffer, cio.bufsize)
@@ -78,11 +91,11 @@ function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
 end
 
 function Base.flush(cio::ChannelIO)
+    cio.rw == :W || return nothing
     _flush(cio, false)
 end
 
 function _flush(cio::ChannelIO, eofsend::Bool)
-    cio.rw == :R && return nothing
     cio.woffset == 0 && !eofsend && return
     resize!(cio.buffer, cio.woffset)
     put!(cio.ch, cio.buffer)
@@ -97,23 +110,6 @@ function Base.close(cio::ChannelIO)
     cio.bufsize = 0
     close(cio.ch)
     nothing
-end
-
-function Base.unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    cio.rw  == :R || throw_inv(cio)
-    p = pp
-    n = nn
-    while n > 0 && !eof(cio)
-        k = cio.woffset - cio.roffset
-        s = pointer(cio.buffer, cio.roffset + 1)
-        i = min(k, n)
-        unsafe_copyto!(p, s, i)
-        k -= i
-        n -= i
-        p += i
-        cio.roffset += i
-    end
-    Int(nn - n)
 end
 
 function Base.peek(cio::ChannelIO)
@@ -170,6 +166,23 @@ function Base.readbytes!(cio::ChannelIO, b::Vector{UInt8}, nb=length(b); all::Bo
         r += k
     end
     return Int(r)
+end
+
+function Base.unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
+    cio.rw  == :R || throw_inv(cio)
+    p = pp
+    n = nn
+    while n > 0 && !eof(cio)
+        k = cio.woffset - cio.roffset
+        s = pointer(cio.buffer, cio.roffset + 1)
+        i = min(k, n)
+        unsafe_copyto!(p, s, i)
+        k -= i
+        n -= i
+        p += i
+        cio.roffset += i
+    end
+    Int(nn - n)
 end
 
 function getbuffer(cio::ChannelIO)
