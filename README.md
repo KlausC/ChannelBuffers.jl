@@ -32,14 +32,14 @@ or
 ## Predefined closures
 
 ``` julia
-    tarx(dir) - read files in input directory and write to output stream
-    tarc(dir) - read input stream and create files in target directory
-    gzip() - read input stream and write compressed data to output stream
-    gunzip() - reverse of gzip
-    transcoder(::Codec) - generalization for other kinds of `TranscoderStreams`
-    curl(URL) - download file from URL and write to output stream
-    serializer(obj) - write serialized for of input object to output stream
-    deserializer() - read input stream and reconstruct serialized object
+    tarx(dir) # read files in input directory and write to output stream
+    tarc(dir) # read input stream and create files in target directory
+    gzip() # read input stream and write compressed data to output stream
+    gunzip() # reverse of gzip
+    transcoder(::Codec) # generalization for other kinds of TranscoderStreams
+    curl(URL) # download file from URL and write to output stream
+    serializer(obj) # write serialized for of input object to output stream
+    deserializer() # read input stream and reconstruct serialized object
 ```
 
 ## Implementation
