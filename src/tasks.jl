@@ -38,7 +38,7 @@ struct BTaskList{V<:Vector{<:BTask}}
 end
 
 import Base: |, <, >
-|(src::BClosureList, btd::BClosure) = BClosureList(vcat(src.list, btd))
+|(src::BClosureList, btd::BClosure) = BClosureList(vcat(src.list, btd), src.cin, src.cout)
 |(src::BClosure, btd::BClosure) = BClosureList([src, btd])
 
 <(list::BClosureList, cin::IO) = BClosureList(list.list, cin, list.cout)
@@ -88,7 +88,7 @@ Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
 Access the argumentless function provided to the task
 """
 task_code(t::BTask{:Task}) = t.task.code
-task_code(t::BTask{:Threat}) = t.code.task_function
+task_code(t::BTask{:Threat}) = t.task.code.task_function
 task_cin(t::BTask) = task_code(t).cin
 task_cout(t::BTask) = task_code(t).cout
 task_function(t::BTask) = task_code(t).btd.f
@@ -130,7 +130,8 @@ function Base.run(btdl::BClosureList)
 end
 
 """
-    closure(f::Function, args...)
+    
+(f::Function, args...)
 
 Generate a `BClosure` object, which can be used to be started in parallel.
 The function `f` must have the signature `f(cin::IO, cout::IO [, args...])`.

@@ -8,3 +8,5 @@ using TranscodingStreams, CodecZlib
     @testset "ChannelIO" begin include("channelio.jl") end 
     @testset "tasks    " begin include("tasks.jl") end
 end
+
+nothing
