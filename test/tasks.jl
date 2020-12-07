@@ -31,28 +31,34 @@ end
     tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl.list))
-    @test all(istaskdone.(tl.list))
-    @test !any(istaskfailed.(tl.list))
+    @test all(istaskstarted.(tl))
+    @test all(istaskdone.(tl))
+    @test !any(istaskfailed.(tl))
     @test sprint(show, tl) !== nothing
 end
 
 @testset "tar -c using pipeline" begin
-tar = pipeline(tarc(dpath("xxx")), gzip(); stdout = open(tpath("xxx.tgz"), "w"))
-tl = run(tar)
-@test length(tl) == 2
-@test wait(tl) === nothing
-@test all(istaskstarted.(tl.list))
-@test !any(istaskfailed.(tl.list))
+    file = tpath("xxx0.tgz")
+    tar = pipeline(tarc(dpath("xxx")), gzip(); stdout = open(file, "w"))
+    tl = run(tar)
+    close(tar.cout)
+    @test length(tl) == 2
+    @test wait(tl) === nothing
+    @test all(istaskstarted.(tl))
+    @test !any(istaskfailed.(tl))
 end
 
 @testset "tar -x $dir" for (decoder, dir) in [(gunzip(), "xxx"), (transcoder(GzipDecompressor()), "xxx2")]
-    tar = source(tpath("xxx.tgz")) | decoder | tarx(tpath(dir))
+    file = tpath("xxx1.tgz")
+    tar = tarc(dpath("xxx")) → gzip() → open(file, "w")
+    tar |> run |> wait
+    close(tar.cout)
+    tar = source(file) | decoder | tarx(tpath(dir))
     tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl.list))
-    @test !any(istaskfailed.(tl.list))
+    @test all(istaskstarted.(tl))
+    @test !any(istaskfailed.(tl))
 
     dc = `diff -r "$DDIR/xxx" "$TDIR/$dir"` # check if contents of both dirs are equal
     @test run(dc) !== nothing
@@ -64,8 +70,8 @@ end
     @test length(tl) == 2
     @test tl[2] isa BTask
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl.list))
-    @test !any(istaskfailed.(tl.list))
+    @test all(istaskstarted.(tl))
+    @test !any(istaskfailed.(tl))
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx2.tgz"` # check if contents of both dirs are equal
     @test run(fc) !== nothing
     bt = tl[2]
@@ -77,7 +83,7 @@ end
 
 @testset "downloads and output redirection" begin
     open(tpath("xxx3.tgz"), "w") do io
-        wait(run(curl("file://" * TDIR * "/xxx.tgz") > io))
+        wait(run(curl("file://" * TDIR * "/xxx.tgz") → io))
     end
     fc = `diff "$TDIR/xxx.tgz" "$TDIR/xxx3.tgz"`
     @test run(fc) !== nothing
@@ -85,7 +91,7 @@ end
 
 @testset "destination and input redirection" begin
     open(tpath("xxx.tgz"), "r") do io
-        (destination(tpath("xxx4.tgz")) < io) |> run |> wait
+        (io → destination(tpath("xxx4.tgz"))) |> run |> wait
     end
     fc = `diff "$TDIR/xxx.tgz" "$TDIR/xxx4.tgz"`
     @test run(fc) !== nothing
@@ -96,7 +102,7 @@ end
     fout = tpath("xxx5.tgz")
     open(fin) do cin
         open(fout, "w") do cout
-            ((gunzip() < cin)| gzip() > cout) |> run |> wait
+            (cin → gunzip() | gzip() → cout) |> run |> wait
         end
     end
     fc = `diff "$fin" "$fout"`

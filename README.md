@@ -7,12 +7,19 @@ The `ChannelBuffers` package allows to perform parallel processing within `Julia
 If the user provides functions `f`, `g`, `h`, of the form
 `f(input::IO, output::IO, args...)`, which read from in input stream and write their
 results to an output stream, they can execute the functions in parallel tasks.
+Input/Output redirection is denoted by `→` (\rightarrow), which indicate the direction of data flow.
+Besides that we support `|` to denote task pipelines. The symbols `<` and `>` known from commandline shells cannot be used,
+because they have a stricter meaning in `Julia`.
 
 ## Examples
 
 ``` julia
-    tl = run(closure(f, fargs...) | closure(g, gargs...) < "afile" > "bfile")
+    ioa = open("afile"); iob = open("bfile", "w")
+
+    tl = run((ioa → closure(f, fargs...)) → closure(g, gargs...) → iob)
     wait(tl)
+    
+    close(ioa); close(iob)
 ```
 
 Some standard closures are predefined, which make that possible:
@@ -25,8 +32,12 @@ or
 
 ``` julia
     a = my_object
-    run( serializer(a) > "xfile") |> wait
-    b = run(deserializer() < "xfile") |> fetch
+    open("file", "w") do cout
+        run( serializer(a) → cout) |> wait
+    end
+    b = open("file") do cin
+        run(cin → deserializer()) |> fetch
+    end
 ```
 
 ## Predefined closures
@@ -60,7 +71,7 @@ which can be run alone or combined with other closures and input/output specifie
 The following `Base` functions are redefined.
 
 ``` julia
-        Base: |, < , >, run, pipeline, wait, fetch
+        Base: |, run, pipeline, wait, fetch
 ```
 
 which are used as in
@@ -68,7 +79,7 @@ which are used as in
 ``` julia
     tl = run(fc::BClosure)::BTaskList
 
-    pl = fc | gc | hc > out < in
+    pl = in → fc | gc | hc → out
     pl = pipeline(fc, gc, hc, stdin=in stdout=out)::BClosureList
 
     tl = run(pl::BClosureList)::BTaskList

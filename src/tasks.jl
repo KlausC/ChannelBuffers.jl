@@ -37,15 +37,19 @@ struct BTaskList{V<:Vector{<:BTask}}
     list::V
 end
 
-import Base: |, <, >
-|(src::BClosureList, btd::BClosure) = BClosureList(vcat(src.list, btd), src.cin, src.cout)
-|(src::BClosure, btd::BClosure) = BClosureList([src, btd])
+import Base: |
 
-<(list::BClosureList, cin::IO) = BClosureList(list.list, cin, list.cout)
-<(list::BClosure, cin::IO) = BClosureList([list], cin, stdout)
+|(left::Union{BClosure,BClosureList}, right::Union{BClosure,BClosureList}) = →(left, right)
+→(left::BClosureList, right::BClosureList) = BClosureList(vcat(left.list, right.list), left.cin, right.cout)
+→(left::BClosureList, right::BClosure) = BClosureList(vcat(left.list, right), left.cin, left.cout)
+→(left::BClosure, right::BClosureList) = BClosureList(vcat(left, right.list), right.cin, right.cout)
+→(left::BClosure, right::BClosure) = BClosureList([left, right])
 
->(list::BClosureList, cout::IO) = BClosureList(list.list, list.cin, cout)
->(list::BClosure, cout::IO) = BClosureList([list], stdin, cout)
+→(cin::IO, list::BClosureList) = BClosureList(list.list, cin, list.cout)
+→(cin::IO, list::BClosure) = BClosureList([list], cin, stdout)
+
+→(list::BClosureList, cout::IO) = BClosureList(list.list, list.cin, cout)
+→(list::BClosure, cout::IO) = BClosureList([list], stdin, cout)
 
 function Base.pipeline(src::BClosure, other::BClosure...; stdin=stdin, stdout=stdout)
     BClosureList([src; other...], stdin, stdout)
@@ -81,6 +85,7 @@ end
 Base.length(tv::BTaskList) = length(tv.list)
 Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
 Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
+Base.iterate(tl::BTaskList, s...) = iterate(tl.list, s...)
 
 """
     task_code, task_cin, task_cout, task_function, task_args
