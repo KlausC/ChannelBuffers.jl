@@ -113,3 +113,9 @@ end
     fc = `diff "$fin" "$fout"`
     @test run(fc) !== nothing
 end
+
+@testset "show tasklist" begin
+    pl = (IOBuffer("hallo") → (gzip() → gunzip()) → (gzip() → gunzip()) → devnull)
+    tl = run(pl)
+    @test sprint(show, MIME"text/plain"(), tl) |> length > 10
+end

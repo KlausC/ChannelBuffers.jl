@@ -84,7 +84,12 @@ end
 
 Base.length(tv::BTaskList) = length(tv.list)
 Base.getindex(tv::BTaskList, i) = getindex(tv.list, i)
-Base.show(io::IO, m::MIME"text/plain", tv::BTaskList) = show(io, m, tv.list)
+function Base.show(io::IO, m::MIME"text/plain", tv::BTaskList)
+    for t in tv
+        show(io, m, t)
+        println(io)
+    end
+end
 Base.iterate(tl::BTaskList, s...) = iterate(tl.list, s...)
 
 """

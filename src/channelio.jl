@@ -53,12 +53,12 @@ end
 function Base.write(cio::ChannelIO, byte::UInt8)
     cio.rw == :W || throw_inv(cio)
     n = length(cio.buffer)
-    if cio.woffset >= n
+    cio.woffset += 1
+    if cio.woffset > n
         resize!(cio.buffer, max(cio.woffset, cio.bufsize))
     end
-    cio.woffset += 1
     cio.buffer[cio.woffset] = byte
-    if cio.woffset > cio.bufsize
+    if cio.woffset >= cio.bufsize
         _flush(cio, false)
     end
 end

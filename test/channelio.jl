@@ -110,3 +110,17 @@ BSZ = 100
     @test sizeof(output) == sizeof(input) * 2 * BSZ
     @test output == input^(2*BSZ)
 end
+
+@testset "bytesio" begin
+    bs = 2
+    cout = ChannelIO(:W, bs)
+    cin = reverseof(cout)
+    wrifu() = begin for i = 1:bs; write(cout, UInt8(i)); end; close(cout); end
+    t = schedule(Task(wrifu))
+    for i = 1:bs
+        @test peek(cin) == i
+        @test read(cin, UInt8) == i
+    end
+    @test_throws EOFError peek(cin) 
+    wait(t)
+end
