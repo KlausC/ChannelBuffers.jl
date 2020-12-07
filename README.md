@@ -1,12 +1,16 @@
 # ChannelBuffers
 
-[![Build Status](https://travis-ci.com/KlausC/ChannelBuffers.jl.svg?branch=master)](https://travis-ci.com/KlausC/ChannelBuffers.jl)
-[![Codecov](https://codecov.io/gh/KlausC/ChannelBuffers.jl/branch/master/graph/badge.svg)](https://codecov.io/gh/KlausC/ChannelBuffers.jl)
+| **Build Status**                    | **Code Coverage**               |
+|:-----------------------------------:|:-------------------------------:|
+| [![Build Status][gha-img]][gha-url] | [![][codecov-img]][codecov-url] |
+
+## Introduction
 
 The `ChannelBuffers` package allows to perform parallel processing within `Julia` in the form of commandline pipes.
 If the user provides functions `f`, `g`, `h`, of the form
 `f(input::IO, output::IO, args...)`, which read from in input stream and write their
 results to an output stream, they can execute the functions in parallel tasks.
+
 Input/Output redirection is denoted by `→` (\rightarrow), which indicate the direction of data flow.
 Besides that we support `|` to denote task pipelines. The symbols `<` and `>` known from commandline shells cannot be used,
 because they have a stricter meaning in `Julia`.
