@@ -16,6 +16,7 @@ matrix:
 
 env:
   - JULIA_PKG_SERVER=""
+  - JULIA_NUM_THREADS="2"
 
 notifications:
   email: false
