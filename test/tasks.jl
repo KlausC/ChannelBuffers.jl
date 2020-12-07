@@ -11,10 +11,14 @@ tpath(x...) = joinpath(TDIR, x...)
 
 @testset "run individual task" begin
     
-file = dpath("xxx", "a")
+    file = tpath("tfile")
+    text = "This is a small test data file"
+    open(file, "w") do io
+        write(io, text)
+    end
     io = IOBuffer()
     run(source(file), stdout = io) |> wait
-    @test String(take!(io)) == "This is a small test data file"
+    @test String(take!(io)) == text
 end
 
 @testset "serialize and deserialize" begin
