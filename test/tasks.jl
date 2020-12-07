@@ -5,6 +5,7 @@ const DDIR = abspath(dirname(@__FILE__),"..", "data", "test")
 const TDIR = mktempdir(cleanup=false)
 
 println("testing tmpdir is $TDIR")
+println("JULIA_NUM_THREADS=$(Threads.nthreads())")
 
 dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)

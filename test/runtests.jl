@@ -4,6 +4,10 @@ using TranscodingStreams, CodecZlib
 
 # reminder: @__MODULE__() === Main to check if executed by CI
 
+if VERSION < v"1.5"
+    peek = Base.peek
+end
+
 @testset "ChannelBuffers" begin
     @testset "ChannelIO" begin include("channelio.jl") end 
     @testset "tasks    " begin include("tasks.jl") end
