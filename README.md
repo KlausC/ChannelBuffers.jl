@@ -108,3 +108,11 @@ Both `wait` and `fetch` throw `TaskFailedException` if the last task in the list
 
 Element type of `BTaskList` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
 methods, like `wait`, `fetch`, `istask...`.
+
+[gha-img]: https://github.com/KlausC/ChannelBuffers.jl/workflows/CI/badge.svg
+[gha-url]: https://github.com/KlausC/ChannelBuffers.jl/actions?query=workflow%3ACI
+
+[coveral-img]: https://coveralls.io/repos/github/KlausC/ChannelBuffers.jl/badge.svg?branch=master
+[coveral-url]: https://coveralls.io/github/KlausC/ChannelBuffers.jl?branch=master
+[codecov-img]: https://codecov.io/gh/KlausC/ChannelBuffers.jl/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/KlausC/ChannelBuffers.jl
