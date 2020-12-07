@@ -1,8 +1,6 @@
 # ChannelBuffers
 
-| **Build Status**                    | **Code Coverage**               |
-|:-----------------------------------:|:-------------------------------:|
-| [![Build Status][gha-img]][gha-url] | [![][codecov-img]][codecov-url] |
+[![Build Status][gha-img]][gha-url]     [![][codecov-img]][codecov-url]
 
 ## Introduction
 
