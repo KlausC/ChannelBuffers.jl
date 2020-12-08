@@ -12,6 +12,8 @@ end
 
 # used for output redirection
 const UIO = Union{IO,AbstractString}
+const DEFAULT_IN = devnull
+const DEFAULT_OUT = devnull
 
 # List of BClosure objects an io redirections
 struct BClosureList{In,Out}
@@ -20,7 +22,7 @@ struct BClosureList{In,Out}
     cout::Out
     BClosureList(list, cin::In, cout::Out) where {In,Out} = new{In,Out}(list, cin, cout)
 end
-BClosureList(list) = BClosureList(list, stdin, stdout)
+BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
 
 struct BTask{X}
     task::Task
@@ -45,13 +47,13 @@ import Base: |
 →(left::BClosure, right::BClosureList) = BClosureList(vcat(left, right.list), right.cin, right.cout)
 →(left::BClosure, right::BClosure) = BClosureList([left, right])
 
-→(cin::IO, list::BClosureList) = BClosureList(list.list, cin, list.cout)
-→(cin::IO, list::BClosure) = BClosureList([list], cin, stdout)
+→(cin::UIO, list::BClosureList) = BClosureList(list.list, cin, list.cout)
+→(cin::UIO, list::BClosure) = BClosureList([list], cin, DEFAULT_OUT)
 
-→(list::BClosureList, cout::IO) = BClosureList(list.list, list.cin, cout)
-→(list::BClosure, cout::IO) = BClosureList([list], stdin, cout)
+→(list::BClosureList, cout::UIO) = BClosureList(list.list, list.cin, cout)
+→(list::BClosure, cout::UIO) = BClosureList([list], DEFAULT_IN, cout)
 
-function Base.pipeline(src::BClosure, other::BClosure...; stdin=stdin, stdout=stdout)
+function Base.pipeline(src::BClosure, other::BClosure...; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     BClosureList([src; other...], stdin, stdout)
 end
 
@@ -105,11 +107,11 @@ task_function(t::BTask) = task_code(t).btd.f
 task_args(t::BTask) = task_code(t).btd.args
 
 """
-    run(BClosure; stdin=stdin, stdout=stdout)
+    run(BClosure; stdin=devnull, stdout=devnull)
 
 Start parallel task redirecting stdin and stdout
 """
-function Base.run(bt::BClosure; stdin=stdin, stdout=stdout)
+function Base.run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     run(BClosureList([bt], stdin, stdout))
 end
 
@@ -158,10 +160,13 @@ end
 # schedule single task
 function _schedule(btd::BClosure, cin, cout)
     function task_function()
+        ci = vopen(cin, "r")
+        co = vopen(cout, "w")
         try
-            btd.f(cin, cout, btd.args...)
+            btd.f(ci, co, btd.args...)
         finally
-            cout isa ChannelIO && close(cout)
+            vclose(ci, cin, "r")
+            vclose(co, cout, "w")
         end
     end
     if Threads.nthreads() <= 1 || Threads.threadid() != 1
@@ -170,3 +175,10 @@ function _schedule(btd::BClosure, cin, cout)
         Threads.@spawn task_function()
     end
 end
+
+vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
+vopen(cio::IO, mode::AbstractString) = cio
+vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
+vclose(cio::ChannelIO, ::Any, mode::AbstractString) = mode == "w" ? close(cio) : nothing
+vclose(cio::Base.TTY, ::Any, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
+vclose(cio::IO, ::Any, mode::AbstractString) = nothing

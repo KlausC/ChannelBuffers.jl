@@ -105,11 +105,7 @@ end
 @testset "io redirection with pipeline" begin
     fin = tpath("xxx4.tgz")
     fout = tpath("xxx5.tgz")
-    open(fin) do cin
-        open(fout, "w") do cout
-            (cin → gunzip() | gzip() → cout) |> run |> wait
-        end
-    end
+    (fin → gunzip() | gzip() → fout) |> run |> wait
     fc = `diff "$fin" "$fout"`
     @test run(fc) !== nothing
 end
