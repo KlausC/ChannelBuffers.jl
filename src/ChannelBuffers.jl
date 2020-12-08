@@ -1,6 +1,7 @@
 module ChannelBuffers
 
-export ChannelIO, reverseof, →
+export ChannelIO, ChannelPipe, →
+export reverseof
 
 include("channelio.jl")
 include("tasks.jl")

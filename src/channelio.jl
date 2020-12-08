@@ -19,8 +19,18 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
     end
 end
  
-const DEFAULT_BUFFER_SIZE = 8192
+const DEFAULT_BUFFER_SIZE = 8192 
 const DEFAULT_CHANNEL_LENGTH = 1
+
+struct ChannelPipe{T}
+    in::ChannelIO{T}
+    out::ChannelIO{T}
+    function ChannelPipe(bufsize::Integer=DEFAULT_BUFFER_SIZE)
+        out = ChannelIO(bufsize)
+        in = reverseof(out)
+        new{typeof(in.buffer)}(in, out)
+    end
+end
 
 function ChannelIO(ch::Channel, rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, rw, zeros(UInt8, 0), bufsize)
@@ -207,3 +217,27 @@ function takebuffer!(cio::ChannelIO)
     cio.roffset = 0
     cio.woffset
 end
+
+function Base.show(io::IO, ::MIME"text/plain", cio::ChannelIO)
+    print(io, "ChannelIO(:", cio.rw, ", ", cio.woffset - cio.roffset, " bytes available)")
+end
+
+function Base.show(io::IO, m::MIME"text/plain", cp::ChannelPipe)
+    print(io, "ChannelPipe(")
+    show(io, m, cp.in)
+    print(" => ", buffered_length(cp), " bytes buffered => ")
+    show(io, m, cp.out)
+    print(")")
+end
+
+buffered_length(ch::Channel) = sum(length.(ch.data))
+buffered_length(cio::ChannelIO) = buffered_length(cio.ch)
+buffered_length(cp::ChannelPipe) = buffered_length(cp.in)
+
+Base.write(io::ChannelPipe, args...) = write(io.in, args...)
+Base.flush(io::ChannelPipe, args...) = flush(io.in)
+Base.read(io::ChannelPipe, args...) = read(io.out, args...)
+Base.eof(io::ChannelPipe) = eof(io.out)
+Base.bytesavailable(io::ChannelPipe) = bytesavailable(io.out)
+Base.peek(io::ChannelPipe, args...) = peek(io.out)
+Base.readbytes!(io::ChannelPipe, args...) = readbytes!(io.out)
