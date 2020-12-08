@@ -124,3 +124,22 @@ end
     @test_throws EOFError peek(cin) 
     wait(t)
 end
+
+@testset "resize in readbytes!" begin
+    v = zeros(UInt8, 0)
+    cin = ChannelIO(); cout = reverseof(cin)
+    schedule(Task(() -> begin write(cout, ones(10)); close(cout); end)) |> wait
+    n = readbytes!(cin, v, 10)
+    @test length(v) == 10
+end
+
+@testset "abort takebuffer!" begin
+    cin = ChannelIO()
+    function waitread()
+        v = read(cin)
+        @test v == UInt8[]
+    end
+    schedule(Task(waitread))
+    yield()
+    close(cin.ch)
+end
