@@ -1,6 +1,6 @@
 # ChannelBuffers
 
-[![Build Status][gha-img]][gha-url]     [![][codecov-img]][codecov-url]
+[![Build Status][gha-img]][gha-url]     [![Coverage Status][codecov-img]][codecov-url]
 
 ## Introduction
 
@@ -9,16 +9,17 @@ If the user provides functions `f`, `g`, `h`, of the form
 `f(input::IO, output::IO, args...)`, which read from in input stream and write their
 results to an output stream, they can execute the functions in parallel tasks.
 
-Note:
-Input/Output redirection is denoted by `→` (\rightarrow), which indicate the direction of data flow.
+**Note:**
+
+Input/Output redirection is denoted by `→` (`\rightarrow`), which indicates the direction of data flow.
 Besides that we support `|` to denote task pipelines. The symbols `<` and `>` known from commandline shells cannot be used,
-because they have a stricter meaning in `Julia`.
+because they bear the semantics of comparison operators in `Julia`.
 
 ## Examples
 
 ``` julia
 
-    tl = run(("afile" → closure(f, fargs...)) → closure(g, gargs...) → "bfile")
+    tl = run("afile" → closure(f, fargs...) → closure(g, gargs...) → "bfile")
     wait(tl)
     
 ```
@@ -52,13 +53,6 @@ or
     serializer(obj) # write serialized for of input object to output stream
     deserializer() # read input stream and reconstruct serialized object
 ```
-
-## Implementation
-
-The internal pipes are implemented by `ChannelIO <: IO` which uses `Channel` objects to transport data between tasks.
-The tasks are spawned on different threads, if multithreading is available (`JULIA_NUM_THREADS > 1`).
-Communication endpoints of the pipeline can be arbitrary `IO` objects or `AbstractString`s denoting file names.
-The files given as strings are appropriately opened and closed.
 
 ## API
 
@@ -103,6 +97,13 @@ If the last task in the pipeline calculates a value, if can be waited for and ob
 ```
 
 Both `wait` and `fetch` throw `TaskFailedException` if the last task in the list failed.
+
+## Implementation
+
+The internal pipes are implemented by `ChannelIO <: IO` which uses `Channel` objects to transport data between tasks.
+The tasks are spawned on different threads, if multithreading is available (`JULIA_NUM_THREADS > 1`).
+Communication endpoints of the pipeline can be arbitrary `IO` objects or `AbstractString`s denoting file names.
+The files given as strings are appropriately opened and closed.
 
 Element type of `BTaskList` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
 methods, like `wait`, `fetch`, `istask...`.
