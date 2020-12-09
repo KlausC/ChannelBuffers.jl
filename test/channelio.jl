@@ -136,10 +136,23 @@ end
 @testset "abort takebuffer!" begin
     cin = ChannelIO()
     function waitread()
-        v = read(cin)
-        @test v == UInt8[]
+        read(cin)
     end
-    schedule(Task(waitread))
+    t = schedule(Task(waitread))
     yield()
     close(cin.ch)
+    v = fetch(t)
+    @test v == UInt8[]
+end
+
+@testset "channel pipes" begin
+    p = ChannelPipe(10)
+    write(p, "test data")
+    flush(p)
+    @test eof(p) === false
+    @test read(p, 9) |> length == 9
+    write(p, 123)
+    close(p.in)
+    b = zeros(UInt8, 100)
+    @test readbytes!(p, b, 8) == 8
 end

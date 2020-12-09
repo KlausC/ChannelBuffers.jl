@@ -22,7 +22,7 @@ end
 const DEFAULT_BUFFER_SIZE = 8192 
 const DEFAULT_CHANNEL_LENGTH = 1
 
-struct ChannelPipe{T}
+struct ChannelPipe{T} <: IO
     in::ChannelIO{T}
     out::ChannelIO{T}
     function ChannelPipe(bufsize::Integer=DEFAULT_BUFFER_SIZE)
@@ -234,10 +234,10 @@ buffered_length(ch::Channel) = sum(length.(ch.data))
 buffered_length(cio::ChannelIO) = buffered_length(cio.ch)
 buffered_length(cp::ChannelPipe) = buffered_length(cp.in)
 
-Base.write(io::ChannelPipe, args...) = write(io.in, args...)
-Base.flush(io::ChannelPipe, args...) = flush(io.in)
-Base.read(io::ChannelPipe, args...) = read(io.out, args...)
+Base.unsafe_write(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_write(io.in, p, n)
+Base.flush(io::ChannelPipe) = flush(io.in)
+Base.unsafe_read(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_read(io.out, p, n)
 Base.eof(io::ChannelPipe) = eof(io.out)
 Base.bytesavailable(io::ChannelPipe) = bytesavailable(io.out)
-Base.peek(io::ChannelPipe, args...) = peek(io.out)
-Base.readbytes!(io::ChannelPipe, args...) = readbytes!(io.out)
+Base.peek(io::ChannelPipe) = peek(io.out)
+Base.readbytes!(io::ChannelPipe, p::AbstractVector{UInt8}, n) = readbytes!(io.out, p, n)
