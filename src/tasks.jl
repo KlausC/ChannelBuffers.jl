@@ -1,4 +1,3 @@
-
 """
     BClosure(f::function, args)
 

@@ -70,7 +70,7 @@ end
 end
 
 @testset "copy file" begin
-    cpy = source(tpath("xxx.tgz")) | destination(tpath("xxx2.tgz"))
+    cpy = source(tpath("xxx.tgz")) | destination(tpath("xxx2.tgz")) → stdout
     tl = run(cpy)
     @test length(tl) == 2
     @test tl[2] isa BTask
