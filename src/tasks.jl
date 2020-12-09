@@ -121,21 +121,17 @@ Start all parallel tasks defined in list, io redirection defaults are defined in
 """
 function Base.run(btdl::BClosureList)
     T = use_tasks() ? :Task : :Threat
-    stdin = btdl.cin
-    stdout = btdl.cout
     n = length(btdl.list)
     tl = Vector{Task}(undef, n)
-    s = btdl.list[n]
-    cout = stdout
-    cin = n == 1 ? stdin : ChannelIO()
-    t = _schedule(s, cin, cout)
-    tl[n] = t
-    for i = n-1:-1:1
+    cout = btdl.cout
+    for i = n:-1:2
+        cp = ChannelPipe()
         s = btdl.list[i]
-        cout = reverseof(cin)
-        cin = i == 1 ? stdin : ChannelIO()
-        t = _schedule(s, cin, cout)
-        tl[i] = t
+        tl[i] = _schedule(s, cp.out, cout)
+        cout = cp.in
+    end
+    if n >= 1
+        tl[1] = _schedule(btdl.list[1], btdl.cin, cout)
     end
     BTaskList(BTask{T}.(tl))
 end

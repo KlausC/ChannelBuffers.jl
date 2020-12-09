@@ -156,3 +156,9 @@ end
     b = zeros(UInt8, 100)
     @test readbytes!(p, b, 8) == 8
 end
+
+@testset "show Channel objects" begin
+    p = ChannelPipe()
+    @test startswith(sprint(show, p.in), "ChannelIO")
+    @test startswith(sprint(show, p), "ChannelPipe") 
+end

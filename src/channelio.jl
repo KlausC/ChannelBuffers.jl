@@ -218,16 +218,16 @@ function takebuffer!(cio::ChannelIO)
     cio.woffset
 end
 
-function Base.show(io::IO, ::MIME"text/plain", cio::ChannelIO)
+function Base.show(io::IO, cio::ChannelIO)
     print(io, "ChannelIO(:", cio.rw, ", ", cio.woffset - cio.roffset, " bytes available)")
 end
 
-function Base.show(io::IO, m::MIME"text/plain", cp::ChannelPipe)
-    print(io, "ChannelPipe(")
-    show(io, m, cp.in)
-    print(" => ", buffered_length(cp), " bytes buffered => ")
-    show(io, m, cp.out)
-    print(")")
+function Base.show(io::IO, cp::ChannelPipe)
+    write(io, "ChannelPipe(")
+    show(io, cp.in)
+    write(io, " => ", string(buffered_length(cp)), " bytes buffered => ")
+    show(io, cp.out)
+    write(io, ")")
 end
 
 buffered_length(ch::Channel) = sum(length.(ch.data))
