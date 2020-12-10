@@ -9,6 +9,9 @@ if VERSION < v"1.5"
 end
 
 @testset "ChannelBuffers" begin
+    @testset "ambiguities" begin
+        @test detect_ambiguities(ChannelBuffers, Base) |> isempty
+    end
     @testset "ChannelIO" begin include("channelio.jl") end 
     @testset "tasks    " begin include("tasks.jl") end
 end

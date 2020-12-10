@@ -1,5 +1,7 @@
 
-import ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args
+using ChannelBuffers: BClosure, BClosureList, closure, DEFAULT_IN, DEFAULT_OUT
+using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args
+using Base: AbstractCmd
 
 const DDIR = abspath(dirname(@__FILE__),"..", "data", "test")
 const TDIR = mktempdir(cleanup=false)
@@ -9,6 +11,30 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
 
 dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)
+
+@testset "pipelines" begin 
+    bcl = closure((cin, cout) -> nothing)
+    cmd = `ls`
+    file = "xxx"
+    @testset "pipeline(...;stdin=$stdin, stdout=$stdout" for stdin in (nothing, "infile"),
+                                                             stdout in (nothing, "outfile")
+        if stdin === nothing && stdout === nothing
+            @test pipeline(bcl, stdin=stdin, stdout=stdout) === bcl
+            @test pipeline(cmd, stdin=stdin, stdout=stdout) === cmd
+        else
+            @test pipeline(bcl, stdin=stdin, stdout=stdout) isa BClosureList
+            @test pipeline(cmd, stdin=stdin, stdout=stdout) isa AbstractCmd
+        end
+    end
+    @testset "pipeline($x, $y)" for x in (bcl, cmd, file), y in (bcl, cmd, file)
+        x === y === file && continue
+        if x === bcl || y === bcl
+            @test pipeline(x, y) isa BClosureList
+        else
+            @test pipeline(x, y) isa AbstractCmd
+        end
+    end
+end
 
 @testset "run individual task" begin
     
@@ -44,7 +70,7 @@ end
 
 @testset "tar -c using pipeline" begin
     file = tpath("xxx0.tgz")
-    tar = pipeline(tarc(dpath("xxx")), gzip(); stdout = open(file, "w"))
+    tar = pipeline(tarc(dpath("xxx")), gzip(), open(file, "w"))
     tl = run(tar)
     close(tar.cout)
     @test length(tl) == 2

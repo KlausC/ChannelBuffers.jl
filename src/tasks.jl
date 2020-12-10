@@ -9,22 +9,27 @@ struct BClosure{F<:Function,Args<:Tuple}
     args::Args
 end
 
+import Base: |, AbstractCmd, pipeline
+
 # used for output redirection
 const UIO = Union{IO,AbstractString}
 const DEFAULT_IN = devnull
 const DEFAULT_OUT = devnull
 
+const ClosureCmd = Union{BClosure,AbstractCmd}
+
 # List of BClosure objects an io redirections
 struct BClosureList{In,Out}
-    list::Vector{<:BClosure}
+    list::Vector{ClosureCmd}
     cin::In
     cout::Out
     BClosureList(list, cin::In, cout::Out) where {In,Out} = new{In,Out}(list, cin, cout)
 end
 BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
 
-struct BTask{X}
-    task::Task
+struct BTask{X,T}
+    task::T
+    BTask{X}(t::T) where {X,T} = new{X,T}(t) 
 end
 Base.show(io::IO, m::MIME"text/plain", bt::BTask) = show(io, m, bt.task)
 Base.fetch(bt::BTask) = fetch(bt.task)
@@ -38,8 +43,6 @@ struct BTaskList{V<:Vector{<:BTask}}
     list::V
 end
 
-import Base: |
-
 |(left::Union{BClosure,BClosureList}, right::Union{BClosure,BClosureList}) = →(left, right)
 →(left::BClosureList, right::BClosureList) = BClosureList(vcat(left.list, right.list), left.cin, right.cout)
 →(left::BClosureList, right::BClosure) = BClosureList(vcat(left.list, right), left.cin, left.cout)
@@ -52,9 +55,36 @@ import Base: |
 →(list::BClosureList, cout::UIO) = BClosureList(list.list, list.cin, cout)
 →(list::BClosure, cout::UIO) = BClosureList([list], DEFAULT_IN, cout)
 
-function Base.pipeline(src::BClosure, other::BClosure...; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
-    BClosureList([src; other...], stdin, stdout)
+newlist(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
+newlist(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
+newlist(list::Vector, ::ClosureCmd, right::AbstractCmd) = vcat(list, right) 
+newlist(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], pipeline(last(list), right))
+newlist(left::AbstractCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
+nelist(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(pipeline(left, first(list)), list[2:end])
+
+function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing)
+    if stdin === nothing && stdout === nothing
+        cmd
+    else
+        BClosureList([cmd], something(stdin,DEFAULT_IN), something(stdout, DEFAULT_OUT))
+    end
 end
+pipeline(left::AbstractCmd, right::BClosure) = BClosureList(vcat(left, right), DEFAULT_IN, DEFAULT_OUT)
+pipeline(left::BClosure, right::ClosureCmd) = BClosureList(vcat(left, right), DEFAULT_IN, DEFAULT_OUT)
+function pipeline(left::BClosureList, right::ClosureCmd)
+    BClosureList(newlist(left.list, last(left.list), right), left.cin, DEFAULT_OUT)
+end
+function pipeline(left::AbstractCmd, right::BClosureList)
+    BClosureList(newlist(left, first(right), right), DEFAULT_IN, right.cout)
+end
+function pipeline(left::BClosure, right::BClosureList)
+    BClosureList(newlist(left, first(right), right), DEFAULT_IN, right.cout)
+end
+pipeline(left::UIO, right::BClosure) = BClosureList([right], left, DEFAULT_OUT)
+pipeline(left::BClosure, right::UIO) = BClosureList([left], DEFAULT_IN, right)
+pipeline(left::UIO, right::BClosureList) = BClosureList(right.list, left, right.cout)
+pipeline(left::BClosureList, right::UIO) = BClosureList(left.list, left.cin, right)
+
 
 """
     wait(tl::BTaskList)
@@ -122,7 +152,7 @@ Start all parallel tasks defined in list, io redirection defaults are defined in
 function Base.run(btdl::BClosureList)
     T = use_tasks() ? :Task : :Threat
     n = length(btdl.list)
-    tl = Vector{Task}(undef, n)
+    tl = Vector{Union{Task,Base.AbstractPipe}}(undef, n)
     cout = btdl.cout
     for i = n:-1:2
         cp = ChannelPipe()
@@ -171,9 +201,13 @@ function _schedule(btd::BClosure, cin, cout)
     end
 end
 
+function _schedule(cmd::Base.AbstractCmd, cin, cout)
+    run(pipeline(cin, cmd, cout))
+end
+
 vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
 vopen(cio::IO, mode::AbstractString) = cio
 vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
-vclose(cio::ChannelIO, ::Any, mode::AbstractString) = mode == "w" ? close(cio) : nothing
-vclose(cio::Base.TTY, ::Any, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
+vclose(cio::ChannelIO, ::IO, mode::AbstractString) = mode == "w" ? close(cio) : nothing
+vclose(cio::Base.TTY, ::IO, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
 vclose(cio::IO, ::Any, mode::AbstractString) = nothing
