@@ -44,16 +44,13 @@ struct BTaskList{V<:Vector{<:BTask}}
 end
 
 |(left::Union{BClosure,BClosureList}, right::Union{BClosure,BClosureList}) = →(left, right)
-→(left::BClosureList, right::BClosureList) = BClosureList(vcat(left.list, right.list), left.cin, right.cout)
-→(left::BClosureList, right::BClosure) = BClosureList(vcat(left.list, right), left.cin, left.cout)
-→(left::BClosure, right::BClosureList) = BClosureList(vcat(left, right.list), right.cin, right.cout)
-→(left::BClosure, right::BClosure) = BClosureList([left, right])
+"""
+    a → b  (\rightarrow operator)
 
-→(cin::UIO, list::BClosureList) = BClosureList(list.list, cin, list.cout)
-→(cin::UIO, list::BClosure) = BClosureList([list], cin, DEFAULT_OUT)
-
-→(list::BClosureList, cout::UIO) = BClosureList(list.list, list.cin, cout)
-→(list::BClosure, cout::UIO) = BClosureList([list], DEFAULT_IN, cout)
+Convenience function to build a pipeline.
+`pipeline(a, b, c)` is essentialy the same as `a → b → c`
+"""
+→(a, b) = pipeline(a, b)
 
 # combine 2 AbstractCmd into a pipeline
 listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
@@ -85,18 +82,21 @@ function pipeline(left::BClosureList, right::ClosureCmd)
     BClosureList(listcombine(left.list, last(left.list), right), left.cin, DEFAULT_OUT)
 end
 function pipeline(left::AbstractCmd, right::BClosureList)
-    BClosureList(listcombine(left, first(right), right), DEFAULT_IN, right.cout)
+    BClosureList(listcombine(left, first(right.list), right.list), DEFAULT_IN, right.cout)
 end
 function pipeline(left::BClosure, right::BClosureList)
-    BClosureList(listcombine(left, first(right), right), DEFAULT_IN, right.cout)
+    BClosureList(listcombine(left, first(right.list), right.list), DEFAULT_IN, right.cout)
 end
 pipeline(left::UIO, right::BClosure) = BClosureList([right], left, DEFAULT_OUT)
 pipeline(left::ChannelIO, right::AbstractCmd) = BClosureList([NOOP, right], left, DEFAULT_OUT)
 pipeline(left::BClosure, right::UIO) = BClosureList([left], DEFAULT_IN, right)
 pipeline(left::AbstractCmd, right::ChannelIO) = BClosureList([left, NOOP], DEFAULT_IN, right)
+function pipeline(left::BClosureList, right::BClosureList)
+    list = vcat(listcombine(left.list, last(left.list), first(right.list)), right.list[2:end])
+    BClosureList(list, left.cin, right.cout)
+end
 
-
-pipeline(left::UIO, right::BClosureList) = BClosureList(listnoop(left, first(right.list), right), left, right.cout)
+pipeline(left::UIO, right::BClosureList) = BClosureList(listnoop(left, first(right.list), right.list), left, right.cout)
 pipeline(left::BClosureList, right::UIO) = BClosureList(listnoop(left.list, last(left.list), right), left.cin, right)
 
 """
