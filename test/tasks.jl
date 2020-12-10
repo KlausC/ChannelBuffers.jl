@@ -27,12 +27,21 @@ tpath(x...) = joinpath(TDIR, x...)
         end
     end
     @testset "pipeline($x, $y)" for x in (bcl, cmd, file), y in (bcl, cmd, file)
-        x === y === file && continue
-        if x === bcl || y === bcl
+        if x === y === file
+            @test_throws MethodError pipeline(x, y)
+        elseif x === bcl || y === bcl
             @test pipeline(x, y) isa BClosureList
         else
             @test pipeline(x, y) isa AbstractCmd
         end
+    end
+    @testset "pipeline(1,2,3)" begin
+        @test pipeline(bcl, bcl, bcl) isa BClosureList
+        @test pipeline(bcl, cmd, bcl) isa BClosureList
+        @test pipeline(cmd, bcl, cmd) isa BClosureList
+        @test pipeline(bcl, bcl, cmd) isa BClosureList
+        @test pipeline(bcl, cmd, cmd) isa BClosureList
+        @test pipeline(bcl, bcl, bcl) isa BClosureList
     end
 end
 
@@ -49,7 +58,7 @@ end
 end
 
 @testset "serialize and deserialize" begin
-    obj = ["hans", 42]
+    obj = ["hans", 92]
     tl = run(serializer(obj) | deserializer())
     @test fetch(tl) == obj
     tl = run(serializer(obj) | gzip() | deserializer())

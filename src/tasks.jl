@@ -55,12 +55,22 @@ end
 →(list::BClosureList, cout::UIO) = BClosureList(list.list, list.cin, cout)
 →(list::BClosure, cout::UIO) = BClosureList([list], DEFAULT_IN, cout)
 
-newlist(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
-newlist(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
-newlist(list::Vector, ::ClosureCmd, right::AbstractCmd) = vcat(list, right) 
-newlist(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], pipeline(last(list), right))
-newlist(left::AbstractCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
-nelist(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(pipeline(left, first(list)), list[2:end])
+# combine 2 AbstractCmd into a pipeline
+listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
+listcombine(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
+listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right) 
+listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], pipeline(last(list), right))
+listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
+listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(pipeline(left, first(list)), list[2:end])
+
+# insert a NOOP task to redirect ChannelIO to/from AbstractCmd
+# combine AbstractCmd with other IO 
+listnoop(::ChannelIO, ::AbstractCmd, list::Vector) = vcat(NOOP, list)
+listnoop(io::UIO, ::AbstractCmd, list::Vector) = vcat(pipeline(io, first(list)), list[2:end])
+listnoop(::UIO, ::ClosureCmd, list::Vector) = list
+listnoop(list::Vector, ::AbstractCmd, ::ChannelIO) = vcat(list, NOOP)
+listnoop(list::Vector, ::AbstractCmd, io::UIO) = vcat(list[1:end-1], pipeline(last(list), io))
+listnoop(list::Vector, ::ClosureCmd, ::UIO) = list
 
 function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing)
     if stdin === nothing && stdout === nothing
@@ -72,19 +82,22 @@ end
 pipeline(left::AbstractCmd, right::BClosure) = BClosureList(vcat(left, right), DEFAULT_IN, DEFAULT_OUT)
 pipeline(left::BClosure, right::ClosureCmd) = BClosureList(vcat(left, right), DEFAULT_IN, DEFAULT_OUT)
 function pipeline(left::BClosureList, right::ClosureCmd)
-    BClosureList(newlist(left.list, last(left.list), right), left.cin, DEFAULT_OUT)
+    BClosureList(listcombine(left.list, last(left.list), right), left.cin, DEFAULT_OUT)
 end
 function pipeline(left::AbstractCmd, right::BClosureList)
-    BClosureList(newlist(left, first(right), right), DEFAULT_IN, right.cout)
+    BClosureList(listcombine(left, first(right), right), DEFAULT_IN, right.cout)
 end
 function pipeline(left::BClosure, right::BClosureList)
-    BClosureList(newlist(left, first(right), right), DEFAULT_IN, right.cout)
+    BClosureList(listcombine(left, first(right), right), DEFAULT_IN, right.cout)
 end
 pipeline(left::UIO, right::BClosure) = BClosureList([right], left, DEFAULT_OUT)
+pipeline(left::ChannelIO, right::AbstractCmd) = BClosureList([NOOP, right], left, DEFAULT_OUT)
 pipeline(left::BClosure, right::UIO) = BClosureList([left], DEFAULT_IN, right)
-pipeline(left::UIO, right::BClosureList) = BClosureList(right.list, left, right.cout)
-pipeline(left::BClosureList, right::UIO) = BClosureList(left.list, left.cin, right)
+pipeline(left::AbstractCmd, right::ChannelIO) = BClosureList([left, NOOP], DEFAULT_IN, right)
 
+
+pipeline(left::UIO, right::BClosureList) = BClosureList(listnoop(left, first(right.list), right), left, right.cout)
+pipeline(left::BClosureList, right::UIO) = BClosureList(listnoop(left.list, last(left.list), right), left.cin, right)
 
 """
     wait(tl::BTaskList)
@@ -151,16 +164,34 @@ Start all parallel tasks defined in list, io redirection defaults are defined in
 """
 function Base.run(btdl::BClosureList)
     T = use_tasks() ? :Task : :Threat
-    n = length(btdl.list)
+    list = btdl.list
+    n = length(list)
     tl = Vector{Union{Task,Base.AbstractPipe}}(undef, n)
+    n > 0 || return BTaskList(BTask{T}.(tl))
+
     cout = btdl.cout
-    for i = n:-1:2
-        cp = ChannelPipe()
-        s = btdl.list[i]
-        tl[i] = _schedule(s, cp.out, cout)
-        cout = cp.in
+    i = n
+    while i > 1
+        s = list[i]
+        if s isa AbstractCmd
+            cout = open(s, i == n ? "w" : "w+")
+            tl[i] = cout
+            i -= 1
+        else
+            if list[i-1] isa AbstractCmd
+                cin = open(list[i-1], i > 2 ? "r+" : "r")
+                tl[i-1] = cin
+                di = 2
+            else
+                cin = ChannelPipe()
+                di = 1
+            end
+            tl[i] = _schedule(s, cin, cout)
+            cout = cin
+            i -= di
+        end
     end
-    if n >= 1
+    if i >= 1
         tl[1] = _schedule(btdl.list[1], btdl.cin, cout)
     end
     BTaskList(BTask{T}.(tl))
@@ -209,5 +240,20 @@ vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
 vopen(cio::IO, mode::AbstractString) = cio
 vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
 vclose(cio::ChannelIO, ::IO, mode::AbstractString) = mode == "w" ? close(cio) : nothing
+vclose(cio::ChannelPipe, io::IO, mode::AbstractString) = vclose(cio.in, io, mode)
 vclose(cio::Base.TTY, ::IO, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
 vclose(cio::IO, ::Any, mode::AbstractString) = nothing
+
+function noop(cin::IO, cout::IO)
+    b = Vector{UInt}(undef, DEFAULT_BUFFER_SIZE)
+    while !eof(cin)
+        n = readbytes!(cin, b)
+        write(cout, b[1:n])
+    end
+end
+"""
+    const NOOP
+
+A BClosure which copies input to output unmodified.
+"""
+const NOOP = closure(noop)
