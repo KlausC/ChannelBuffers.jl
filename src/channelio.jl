@@ -116,6 +116,7 @@ function _flush(cio::ChannelIO, eofsend::Bool)
 end
 
 function Base.close(cio::ChannelIO)
+    isopen(cio.ch) || return
     _flush(cio, true)
     cio.bufsize = 0
     close(cio.ch)
@@ -241,7 +242,8 @@ Base.unsafe_read(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_read(io.out, 
 Base.eof(io::ChannelPipe) = eof(io.out)
 Base.bytesavailable(io::ChannelPipe) = bytesavailable(io.out)
 Base.peek(io::ChannelPipe) = peek(io.out)
-Base.readbytes!(io::ChannelPipe, p::AbstractVector{UInt8}, n) = readbytes!(io.out, p, n)
+Base.readbytes!(io::ChannelPipe, p::AbstractVector{UInt8}, n=length(p)) = readbytes!(io.out, p, n)
 Base.read(io::ChannelPipe, T::Type{UInt8}) = read(io.out, T)
 Base.pipe_reader(io::ChannelPipe) = io.out
 Base.pipe_writer(io::ChannelPipe) = io.in
+Base.close(io::ChannelPipe) = begin close(io.in); close(io.out) end

@@ -175,11 +175,13 @@ function Base.run(btdl::BClosureList)
         s = list[i]
         if s isa AbstractCmd
             cout = open(s, i == n ? "w" : "w+")
+            dprintln("opened $cout $(i == n ? "w" : "w+")")
             tl[i] = cout
             i -= 1
         else
             if list[i-1] isa AbstractCmd
                 cin = open(list[i-1], i > 2 ? "r+" : "r")
+                dprintln("opened $cin $(i > 2 ? "r+" : "r")")
                 tl[i-1] = cin
                 di = 2
             else
@@ -219,9 +221,12 @@ function _schedule(btd::BClosure, cin, cout)
         ci = vopen(cin, "r")
         co = vopen(cout, "w")
         try
+            dprintln("task_function $(btd.f)")
             btd.f(ci, co, btd.args...)
         finally
+            dprintln("closing $ci r")
             vclose(ci, cin, "r")
+            dprintln("closing $co w")
             vclose(co, cout, "w")
         end
     end
@@ -232,25 +237,22 @@ function _schedule(btd::BClosure, cin, cout)
     end
 end
 
-function _schedule(cmd::Base.AbstractCmd, cin, cout)
-    run(pipeline(cin, cmd, cout))
-end
-
 vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
 vopen(cio::IO, mode::AbstractString) = cio
 vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
 vclose(cio::ChannelIO, ::IO, mode::AbstractString) = mode == "w" ? close(cio) : nothing
-vclose(cio::ChannelPipe, io::IO, mode::AbstractString) = vclose(cio.in, io, mode)
+vclose(cio::Base.AbstractPipe, io::IO, mode::AbstractString) = isopen(cio.in) && close(cio.in)
 vclose(cio::Base.TTY, ::IO, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
 vclose(cio::IO, ::Any, mode::AbstractString) = nothing
 
 function noop(cin::IO, cout::IO)
-    b = Vector{UInt}(undef, DEFAULT_BUFFER_SIZE)
+    b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
     while !eof(cin)
         n = readbytes!(cin, b)
         write(cout, b[1:n])
     end
 end
+
 """
     const NOOP
 

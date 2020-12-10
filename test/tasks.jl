@@ -1,6 +1,6 @@
 
 using ChannelBuffers: BClosure, BClosureList, closure, DEFAULT_IN, DEFAULT_OUT
-using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args
+using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 using Base: AbstractCmd
 
 const DDIR = abspath(dirname(@__FILE__),"..", "data", "test")
@@ -149,4 +149,11 @@ end
     pl = (IOBuffer("hallo") → (gzip() → gunzip()) → (gzip() → gunzip()) → devnull)
     tl = run(pl)
     @test sprint(show, MIME"text/plain"(), tl) |> length > 10
+end
+
+@testset "mixed pipline run" begin
+    pl = pipeline(`ls ../src`, gzip(), `gunzip -`, NOOP, "test.out")
+    tl = run(pl)
+    @test wait(tl) === nothing
+    @test run(pipeline(`ls ../src`, `cmp - "test.out"`)) !== nothing
 end
