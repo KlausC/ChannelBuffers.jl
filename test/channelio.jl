@@ -166,3 +166,10 @@ end
     @test startswith(sprint(show, p.in), "ChannelIO")
     @test startswith(sprint(show, p), "ChannelPipe") 
 end
+
+@testset "position and seek" begin
+    p = ChannelPipe()
+    write(p.in, "Ätext")
+    flush(p.in)
+    @test peek(p.out, Char) == read(p.out, Char)
+end

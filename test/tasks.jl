@@ -152,8 +152,9 @@ end
 end
 
 @testset "mixed pipline run" begin
-    pl = pipeline(`ls ../src`, gzip(), `gunzip -`, NOOP, "test.out")
+    fout = tpath("xxx.txt")
+    pl = pipeline(`ls ../src`, NOOP, `cat -`, NOOP, fout)
     tl = run(pl)
     @test wait(tl) === nothing
-    @test run(pipeline(`ls ../src`, `cmp - "test.out"`)) !== nothing
+    @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
 end
