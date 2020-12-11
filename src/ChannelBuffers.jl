@@ -5,7 +5,7 @@ export reverseof
 
 # debugging support
 const LOCK = ReentrantLock()
-const DEBUGINFO = Ref(false)
+const DEBUGINFO = Ref(true)
 function dprintln(args...)
     if DEBUGINFO[]
         lock(LOCK) do
