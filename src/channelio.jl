@@ -1,10 +1,13 @@
+
+abstract type AbstractChannelIO <: IO end
+
 """
     ChannelIO
 
 Is read and written like an `IOStream`. If buffers are empty/full transport them using
 channels allowing parallel task pipelining.
 """
-mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
+mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: AbstractChannelIO
     ch::Channel{T}
     rw::Symbol # :R readonly :W writeonly
     buffer::T

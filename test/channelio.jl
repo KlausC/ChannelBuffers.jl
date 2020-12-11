@@ -164,7 +164,7 @@ end
 @testset "show Channel objects" begin
     p = ChannelPipe()
     @test startswith(sprint(show, p.in), "ChannelIO")
-    @test startswith(sprint(show, p), "ChannelPipe") 
+    @test startswith(sprint(show, p), "ChannelPipe")
 end
 
 @testset "position and seek" begin
