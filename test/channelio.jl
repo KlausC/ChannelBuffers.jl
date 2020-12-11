@@ -147,6 +147,10 @@ end
 
 @testset "channel pipes" begin
     p = ChannelPipe(10)
+    @test !isreadable(p.in)
+    @test iswritable(p.in)
+    @test isreadable(p.out)
+    @test !iswritable(p.out)
     write(p, "test data")
     flush(p)
     @test eof(p) === false

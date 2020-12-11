@@ -241,7 +241,8 @@ vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
 vopen(cio::IO, mode::AbstractString) = cio
 vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
 vclose(cio::ChannelIO, ::IO, mode::AbstractString) = mode == "w" ? close(cio) : nothing
-vclose(cio::Base.AbstractPipe, io::IO, mode::AbstractString) = isopen(cio.in) && close(cio.in)
+vclose(cio::Base.AbstractPipe, io::IO, mode::AbstractString) = isopen(cio) && close(cio.in)
+vclose(cio::IOContext{<:Base.AbstractPipe}, io::IO, mode::AbstractString) = vclose(cio.io, io, mode)
 vclose(cio::Base.TTY, ::IO, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
 vclose(cio::IO, ::Any, mode::AbstractString) = nothing
 

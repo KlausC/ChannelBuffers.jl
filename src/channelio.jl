@@ -8,14 +8,16 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: IO
     ch::Channel{T}
     rw::Symbol # :R readonly :W writeonly
     buffer::T
-    bufsize::UInt
-    woffset::UInt
-    roffset::UInt
+    bufsize::Int
+    woffset::Int
+    roffset::Int
     eofpending::Bool
+    position::Int
+    mark::Int
     function ChannelIO(ch::Channel, rw::Symbol, buffer::V, bufsize::Integer) where V
         bufsize > 0 || throw(ArgumentError("minimal buffer size is $bufsize"))
         rw == :R || rw == :W || throw(ArgumentError("read/write must be :R or :W"))
-        new{V}(ch, rw, buffer, bufsize, 0, 0, false)
+        new{V}(ch, rw, buffer, bufsize, 0, 0, false, 0, -1)
     end
 end
  
@@ -81,11 +83,12 @@ function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
     end
     d = pointer(cio.buffer, k+1)
     s = pp
-    n = nn
+    n = Int(nn)
     while n + k >= cio.bufsize
         i = cio.bufsize - k
         unsafe_copyto!(d, s, i)
         put!(cio.ch, cio.buffer)
+        cio.position += cio.woffset
         cio.buffer = getbuffer(cio)
         d = pointer(cio.buffer, 1)
         cio.woffset = 0
@@ -109,6 +112,7 @@ function _flush(cio::ChannelIO, eofsend::Bool)
     cio.woffset == 0 && !eofsend && return
     resize!(cio.buffer, cio.woffset)
     put!(cio.ch, cio.buffer)
+    cio.position += cio.woffset
     cio.buffer = getbuffer(cio)
     cio.woffset = 0
     cio.roffset = 0
@@ -182,7 +186,7 @@ end
 function Base.unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
     cio.rw  == :R || throw_inv(cio)
     p = pp
-    n = nn
+    n = Int(nn)
     while n > 0 && !eof(cio)
         k = cio.woffset - cio.roffset
         s = pointer(cio.buffer, cio.roffset + 1)
@@ -209,6 +213,7 @@ function takebuffer!(cio::ChannelIO)
         try
             cio.buffer = take!(cio.ch)
             cio.woffset = length(cio.buffer)
+            cio.position += cio.woffset
             cio.eofpending |= cio.woffset == 0
         catch
             cio.woffset = 0
@@ -217,6 +222,36 @@ function takebuffer!(cio::ChannelIO)
     end
     cio.roffset = 0
     cio.woffset
+end
+
+Base.isreadable(cio::ChannelIO) = cio.rw == :R
+Base.iswritable(cio::ChannelIO) = cio.rw == :W
+
+function Base.position(cio::ChannelIO)
+    cio.position + (cio.rw == :W ? cio.woffset : cio.roffset - cio.woffset)
+end
+
+Base.seek(cio::ChannelIO, p) = isreadable(cio) ? seek_r(cio, p) : seek_w(cio, p)
+
+function seek_r(cio::ChannelIO, p::Integer)
+    if cio.position - cio.woffset <= p <= cio.position
+        cio.roffset = p - cio.position + cio.woffset
+    elseif p > cio.position - cio.woffset
+        
+    else
+        boundaries = "$(cio.position - cio.woffset) <= $p <= $(cio.position)"
+        throw(ArgumentError("cannot seek beyond positions ($boundaries)"))
+    end
+    cio
+end
+function seek_w(cio::ChannelIO, p::Integer)
+    if cio.position + cio.roffset <= p <= cio.position + cio.woffset
+        cio.woffset = p - cio.position
+    else
+        boundaries = "$(cio.position + cio.roffset) <= $p <= $(cio.woffset+cio.position)"
+        throw(ArgumentError("cannot seek beyond positions ($boundaries)"))
+    end
+    cio
 end
 
 function Base.show(io::IO, cio::ChannelIO)
