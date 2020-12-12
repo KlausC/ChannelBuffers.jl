@@ -37,6 +37,8 @@ struct ChannelPipe{T} <: Base.AbstractPipe
     end
 end
 
+const AllChannelIO = Union{ChannelIO,ChannelPipe}
+
 function ChannelIO(ch::Channel, rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, rw, zeros(UInt8, 0), bufsize)
 end
@@ -239,8 +241,6 @@ Base.seek(cio::ChannelIO, p) = isreadable(cio) ? seek_r(cio, p) : seek_w(cio, p)
 function seek_r(cio::ChannelIO, p::Integer)
     if cio.position - cio.woffset <= p <= cio.position
         cio.roffset = p - cio.position + cio.woffset
-    elseif p > cio.position - cio.woffset
-        
     else
         boundaries = "$(cio.position - cio.woffset) <= $p <= $(cio.position)"
         throw(ArgumentError("cannot seek beyond positions ($boundaries)"))

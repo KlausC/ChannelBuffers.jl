@@ -3,12 +3,6 @@ using ChannelBuffers: BClosure, BClosureList, closure, DEFAULT_IN, DEFAULT_OUT
 using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 using Base: AbstractCmd
 
-const DDIR = abspath(dirname(@__FILE__),"..", "data", "test")
-const TDIR = mktempdir(cleanup=false)
-
-println("testing tmpdir is $TDIR")
-println("JULIA_NUM_THREADS=$(Threads.nthreads())")
-
 dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)
 
@@ -42,6 +36,19 @@ tpath(x...) = joinpath(TDIR, x...)
         @test pipeline(bcl, bcl, cmd) isa BClosureList
         @test pipeline(bcl, cmd, cmd) isa BClosureList
         @test pipeline(bcl, bcl, bcl) isa BClosureList
+    end
+
+    @testset "pipeline with ChannelIO" for p in (ChannelIO(), ChannelPipe())
+        @test length(pipeline(cmd, p).list) == 2
+        @test length(pipeline(p, cmd).list) == 2
+        @test length(pipeline(pipeline(bcl, cmd), p).list) == 3
+        @test length(pipeline(p, pipeline(cmd, bcl)).list) == 3
+        @test length(pipeline(pipeline(bcl, cmd), "file").list) == 2
+        @test length(pipeline("file", pipeline(cmd, bcl)).list) == 2
+    end
+    @testset "pipeline with list" begin
+        @test length(pipeline(cmd, pipeline(bcl, bcl)).list) == 3
+        @test length(pipeline(cmd, pipeline(cmd, bcl)).list) == 2
     end
 end
 
@@ -153,7 +160,7 @@ end
 
 @testset "mixed pipline run" begin
     fout = tpath("xxx.txt")
-    pl = pipeline(`ls ../src`, NOOP, `cat -`, NOOP, fout)
+    pl = pipeline(`ls ../src`, NOOP, `cat -`, fout)
     tl = run(pl)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing

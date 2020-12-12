@@ -8,6 +8,12 @@ if VERSION < v"1.5"
     peek = Base.peek
 end
 
+const DDIR = abspath(dirname(@__FILE__),"..", "data", "test")
+const TDIR = mktempdir(cleanup=false)
+
+println("testing tmpdir is $TDIR test data from $DDIR")
+println("JULIA_NUM_THREADS=$(Threads.nthreads())")
+
 @testset "ChannelBuffers" begin
     @testset "ambiguities" begin
         @test detect_ambiguities(ChannelBuffers, Base) |> isempty

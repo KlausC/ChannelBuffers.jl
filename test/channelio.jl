@@ -169,7 +169,19 @@ end
 
 @testset "position and seek" begin
     p = ChannelPipe()
-    write(p.in, "Ätext")
-    flush(p.in)
-    @test peek(p.out, Char) == read(p.out, Char)
+    @test Base.pipe_reader(p) === p.out
+    @test Base.pipe_writer(p) === p.in
+    data = "Ätext"
+    write(p, data)
+    @test position(p.in) == sizeof(data)
+    @test seek(p.in, 4) === p.in
+    @test position(p.in) == 4
+    flush(p)
+    @test position(p.in) == 4
+    @test_throws Exception seek(p.in, 5)
+    @test peek(p, Char) == read(p, Char)
+    @test_throws Exception seek(p.out, 5)
+    close(p.in)
+    @test read(p, String) == data[3:4]
+    @test close(p) === nothing
 end

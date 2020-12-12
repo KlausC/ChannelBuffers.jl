@@ -13,7 +13,7 @@ import Base: |, AbstractCmd, pipeline
 
 # used for output redirection
 const UIO = Union{IO,AbstractString}
-const AllIO = Union{UIO,AbstractChannelIO}
+const AllIO = Union{UIO,AllChannelIO}
 const DEFAULT_IN = devnull
 const DEFAULT_OUT = devnull
 
@@ -24,7 +24,10 @@ struct BClosureList{In,Out}
     list::Vector{ClosureCmd}
     cin::In
     cout::Out
-    BClosureList(list, cin::In, cout::Out) where {In,Out} = new{In,Out}(list, cin, cout)
+    @noinline function BClosureList(list, cin::In, cout::Out) where {In,Out}
+        #println("BClosureList($list)")
+        new{In,Out}(list, cin, cout)
+    end
 end
 BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
 
@@ -54,25 +57,35 @@ Convenience function to build a pipeline.
 →(a, b) = pipeline(a, b)
 
 # combine 2 AbstractCmd into a pipeline
-listcombine(cmd::ClosureCmd, v::Vector) = listcombine(cmd, first(v), v)
-listcombine(v::Vector, cmd::ClosureCmd) = listcombine(v, last(v), cmd)
+listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, first(v), v)
+listcombine(v::Vector, cmd::ClosureCmd) = isempty(v) ? [cmd] : listcombine(v, last(v), cmd)
 listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
 listcombine(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
 listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right) 
-listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], pipeline(last(list), right))
+listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], listcombine(last(list), right))
 listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
-listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(pipeline(left, first(list)), list[2:end])
+listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(listcombine(left, first(list)), list[2:end])
+
+function listcombine(left::Vector, right::Vector)
+    isempty(right) && return left
+    isempty(left) && return right
+    listcombine(listcombine(left, first(right)), right[2:end])
+end
 
 # insert a NOOP task to redirect ChannelIO to/from AbstractCmd
 # combine AbstractCmd with other IO
+listnoop(io::UIO, cmd::AbstractCmd) = [pipeline(cmd, stdin=io)]
+listnoop(io::AllChannelIO, cmd::AbstractCmd) = [NOOP, cmd]
+listnoop(io::AllIO, cmd::ClosureCmd) = [cmd]
+listnoop(cmd::AbstractCmd, io::UIO) = [pipeline(cmd, stdout=io)]
+listnoop(cmd::AbstractCmd, io::AllChannelIO) = [cmd, NOOP]
+listnoop(cmd::ClosureCmd, io::AllIO) = [cmd]
+
 listnoop(io::AllIO, v::Vector) = listnoop(io, first(v), v)
 listnoop(v::Vector, io::AllIO) = listnoop(v, last(v), io)
-listnoop(::ChannelIO, ::AbstractCmd, list::Vector) = vcat(NOOP, list)
-listnoop(io::UIO, ::AbstractCmd, list::Vector) = vcat(pipeline(io, first(list)), list[2:end])
-listnoop(::UIO, ::ClosureCmd, list::Vector) = list
-listnoop(list::Vector, ::AbstractCmd, ::ChannelIO) = vcat(list, NOOP)
-listnoop(list::Vector, ::AbstractCmd, io::UIO) = vcat(list[1:end-1], pipeline(last(list), io))
-listnoop(list::Vector, ::ClosureCmd, ::UIO) = list
+
+listnoop(v::Vector, vcmd::ClosureCmd, io::AllIO) = vcat(v[1:end-1], listnoop(v[end], io))
+listnoop(io::AllIO, vcmd::ClosureCmd, v::Vector) = vcat(listnoop(io, v[1]), v[2:end])
 
 # pipeline of one Cmd - in analogy to Base
 function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing)
@@ -95,22 +108,20 @@ pipeline(left::AbstractCmd, right::BClosureList) = BClosureList(listcombine(left
 pipeline(left::BClosure, right::BClosureList) = BClosureList(listcombine(left, right.list), DEFAULT_IN, right.cout)
 
 # combine Cmd with IO
-pipeline(left::UIO, right::BClosure) = BClosureList([right], left, DEFAULT_OUT)
-pipeline(left::ChannelIO, right::AbstractCmd) = BClosureList([NOOP, right], left, DEFAULT_OUT)
-# UIO, AbstractCmd is in Base
-pipeline(left::BClosure, right::UIO) = BClosureList([left], DEFAULT_IN, right)
-pipeline(left::AbstractCmd, right::ChannelIO) = BClosureList([left, NOOP], DEFAULT_IN, right)
-# AbstractCmd, UIO is in Base
+pipeline(left::AllIO, right::BClosure) = BClosureList(listnoop(left, right), left, DEFAULT_OUT)
+pipeline(left::BClosure, right::AllIO) = BClosureList(listnoop(left, right), DEFAULT_IN, right)
+pipeline(left::AllChannelIO, right::AbstractCmd) = BClosureList(listnoop(left, right), left, DEFAULT_OUT)
+pipeline(left::AbstractCmd, right::AllChannelIO) = BClosureList(listnoop(left, right), DEFAULT_IN, right)
+# AbstractCmd with UIO is in Base
 
 # combine two lists
 function pipeline(left::BClosureList, right::BClosureList)
-    list = vcat(listcombine(left.list, first(right.list)), right.list[2:end])
-    BClosureList(list, left.cin, right.cout)
+    BClosureList(listcombine(left.list, right.list), left.cin, right.cout)
 end
 
 # combine list with IO
-pipeline(left::UIO, right::BClosureList) = BClosureList(listnoop(left, right.list), left, right.cout)
-pipeline(left::BClosureList, right::UIO) = BClosureList(listnoop(left.list, right), left.cin, right)
+pipeline(left::AllIO, right::BClosureList) = BClosureList(listnoop(left, right.list), left, right.cout)
+pipeline(left::BClosureList, right::AllIO) = BClosureList(listnoop(left.list, right), left.cin, right)
 
 """
     wait(tl::BTaskList)
@@ -188,13 +199,11 @@ function Base.run(btdl::BClosureList)
         s = list[i]
         if s isa AbstractCmd
             cout = open(s, write=true, read= i == n)
-            dprintln("opened $cout $(i == n ? "w" : "w+")")
             tl[i] = cout
             i -= 1
         else
             if list[i-1] isa AbstractCmd
                 cin = open(list[i-1], read=true, write = i > 2)
-                dprintln("opened $cin $(i > 2 ? "r+" : "r")")
                 tl[i-1] = cin
                 di = 2
             else
@@ -234,12 +243,9 @@ function _schedule(btd::BClosure, cin, cout)
         ci, hr = vopen(cin)
         co, hw = vopen(cout, true)
         try
-            dprintln("task_function $(btd.f) $cin $cout")
             btd.f(ci, co, btd.args...)
         finally
-            dprintln("closing $ci r")
             vclose(hr, ci)
-            dprintln("closing $co w")
             vclose(hw, co, true)
         end
     end
