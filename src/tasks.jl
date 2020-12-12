@@ -187,13 +187,13 @@ function Base.run(btdl::BClosureList)
     while i > 1
         s = list[i]
         if s isa AbstractCmd
-            cout = open(s, i == n ? "w" : "w+")
+            cout = open(s, write=true, read= i == n)
             dprintln("opened $cout $(i == n ? "w" : "w+")")
             tl[i] = cout
             i -= 1
         else
             if list[i-1] isa AbstractCmd
-                cin = open(list[i-1], i > 2 ? "r+" : "r")
+                cin = open(list[i-1], read=true, write = i > 2)
                 dprintln("opened $cin $(i > 2 ? "r+" : "r")")
                 tl[i-1] = cin
                 di = 2
@@ -231,16 +231,16 @@ end
 # schedule single task
 function _schedule(btd::BClosure, cin, cout)
     function task_function()
-        ci = vopen(cin, "r")
-        co = vopen(cout, "w")
+        ci, hr = vopen(cin)
+        co, hw = vopen(cout, true)
         try
-            dprintln("task_function $(btd.f)")
+            dprintln("task_function $(btd.f) $cin $cout")
             btd.f(ci, co, btd.args...)
         finally
             dprintln("closing $ci r")
-            vclose(ci, cin, "r")
+            vclose(hr, ci)
             dprintln("closing $co w")
-            vclose(co, cout, "w")
+            vclose(hw, co, true)
         end
     end
     if Threads.nthreads() <= 1 || Threads.threadid() != 1
@@ -250,15 +250,19 @@ function _schedule(btd::BClosure, cin, cout)
     end
 end
 
-vopen(file::AbstractString, mode::AbstractString) = open(file, mode)
-vopen(cio::IO, mode::AbstractString) = cio
-vclose(cio::IO, file::AbstractString, mode::AbstractString) = close(cio)
-vclose(cio::ChannelIO, ::IO, mode::AbstractString) = mode == "w" ? close(cio) : nothing
-vclose(cio::Base.AbstractPipe, io::IO, mode::AbstractString) = isopen(cio) && close(cio.in)
-vclose(cio::ChannelPipe, io::IO, mode::AbstractString) = isopen(cio.in) && close(cio.in)
-vclose(cio::IOContext{<:Base.AbstractPipe}, io::IO, mode::AbstractString) = vclose(cio.io.in, io, mode)
-vclose(cio::Base.TTY, ::IO, mode::AbstractString) = nothing # must not be changed to avoid REPL kill
-vclose(cio::IO, ::Any, mode::AbstractString) = nothing
+vopen(file::AbstractString, write=false) = (open(file, write=write), true)
+vopen(fr::Base.FileRedirect, write=false) = (open(fr.filename, write=write, append=fr.append), true)
+vopen(cio, write=false) = (cio, false)
+
+vclose(here::Bool, cio, write=false) = here ? close(cio) : vclose(cio, write)
+
+vclose(cio::Base.TTY, write) = nothing # must not be changed to avoid REPL kill
+vclose(cio::IOContext, write) = vclose(cio.io, write)
+vclose(cio::Base.AbstractPipe, write) = write && isopen(cio.in) ? close(cio.in) : nothing
+vclose(cio::ChannelIO, write) = write && isopen(cio) ? close(cio) : nothing
+vclose(cio::ChannelPipe, write) = write && isopen(cio.in) ? close(cio.in) : nothing
+vclose(cio::Channel, write) = isopen(cio) ? close(cio) : nothing
+vclose(cio, write) = nothing
 
 function noop(cin::IO, cout::IO)
     b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)

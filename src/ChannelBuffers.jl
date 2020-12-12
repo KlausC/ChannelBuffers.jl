@@ -5,11 +5,15 @@ export reverseof
 
 # debugging support
 const LOCK = ReentrantLock()
-const DEBUGINFO = Ref(true)
+const DEBUGINFO = Ref(false)
+const LOG = "/tmp/channel.log"
 function dprintln(args...)
     if DEBUGINFO[]
         lock(LOCK) do
-            println(args...)
+            logfile = open(LOG, append=true)
+            write(logfile, args...)
+            write(logfile, '\n')
+            flush(logfile)
         end
     end
 end
