@@ -258,7 +258,7 @@ function seek_w(cio::ChannelIO, p::Integer)
 end
 
 function Base.show(io::IO, cio::ChannelIO)
-    print(io, "ChannelIO(:", cio.rw, ", ", cio.woffset - cio.roffset, " bytes available)")
+    print(io, "ChannelIO(:", cio.rw, ", ", cio.woffset - cio.roffset, " bytes available) position ", cio.position, " (", cio.ch.state, ")")
 end
 
 function Base.show(io::IO, cp::ChannelPipe)

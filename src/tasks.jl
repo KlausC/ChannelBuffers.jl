@@ -55,6 +55,7 @@ Convenience function to build a pipeline.
 `pipeline(a, b, c)` is essentialy the same as `a → b → c`
 """
 →(a, b) = pipeline(a, b)
+→(ci::UIO, co::UIO) = pipeline(ci, NOOP, co)
 
 # combine 2 AbstractCmd into a pipeline
 listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, first(v), v)
@@ -270,17 +271,46 @@ vclose(cio::ChannelPipe, write) = write && isopen(cio.in) ? close(cio.in) : noth
 vclose(cio::Channel, write) = isopen(cio) ? close(cio) : nothing
 vclose(cio, write) = nothing
 
-function noop(cin::IO, cout::IO)
+
+function _noop(cin::IO, cout::IO)
     b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
-    while !eof(cin)
-        n = readbytes!(cin, b)
-        write(cout, b[1:n])
+    while !noop_eof(cin)
+        try
+            x = noop_read(cin, b)
+            #println("noop: ", x)
+            noop_write(cout, x)
+        catch ex
+            ex isa InvalidStateException || rethrow(ex)
+        end
     end
 end
+function noop()
+    closure(_noop)
+end
+
+noop_eof(ci::IO) = eof(ci)
+noop_read(ci::IO, b) = b[1:readbytes!(ci, b)]
+noop_write(co::IO, x) = write(co, x)
+
+noop_eof(ch::Channel) = isempty(ch) && !isopen(ch)
+noop_read(ch::Channel) = take!(ch)
+noop_write(ch::Channel, x) = put!(ch, x)
+
+noop_eof(ci::ChannelIO) = noop_eof(ci.ch)
+noop_read(ci::ChannelIO, b) = begin x = noop_read(ci.ch); ci.position += sizeof(x); x end
+function noop_write(co::ChannelIO, x)
+    println("noop_write", x, co)
+    co.position += sizeof(x)
+    noop_write(co.ch, x)
+end
+
+noop_eof(ci::ChannelPipe) = noop_eof(Base.pipe_reader(ci))
+noop_read(ci::ChannelPipe, b) = noop_read(Base.pipe_reader(ci), b)
+noop_write(co::ChannelPipe, b) = noop_read(Base.pipe_writer(co), b)
 
 """
     const NOOP
 
 A BClosure which copies input to output unmodified.
 """
-const NOOP = closure(noop)
+const NOOP = noop()
