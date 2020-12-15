@@ -165,3 +165,14 @@ end
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
 end
+
+@testset "noop optimizations" begin
+    pi = ChannelPipe()
+    po = ChannelPipe()
+    pl = pi → NOOP → po
+    tl = run(pl)
+    text = "hallo"
+    write(pi, text)
+    close(Base.pipe_writer(pi))
+    @test read(po, String) == text
+end

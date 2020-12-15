@@ -265,9 +265,12 @@ vclose(here::Bool, cio, write=false) = here ? close(cio) : vclose(cio, write)
 
 vclose(cio::Base.TTY, write) = nothing # must not be changed to avoid REPL kill
 vclose(cio::IOContext, write) = vclose(cio.io, write)
-vclose(cio::Base.AbstractPipe, write) = write && isopen(cio.in) ? close(cio.in) : nothing
+function vclose(cio::Base.AbstractPipe, write)
+    w = Base.pipe_writer(cio)
+    write && isopen(w) ? close(w) : nothing
+end
 vclose(cio::ChannelIO, write) = write && isopen(cio) ? close(cio) : nothing
-vclose(cio::ChannelPipe, write) = write && isopen(cio.in) ? close(cio.in) : nothing
+vclose(cio::ChannelPipe, write) = vclose(Base.pipe_writer(cio), write)
 vclose(cio::Channel, write) = isopen(cio) ? close(cio) : nothing
 vclose(cio, write) = nothing
 
@@ -275,9 +278,8 @@ vclose(cio, write) = nothing
 function _noop(cin::IO, cout::IO)
     b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
     while !noop_eof(cin)
-        try
+        x = try
             x = noop_read(cin, b)
-            #println("noop: ", x)
             noop_write(cout, x)
         catch ex
             ex isa InvalidStateException || rethrow(ex)
@@ -299,14 +301,13 @@ noop_write(ch::Channel, x) = put!(ch, x)
 noop_eof(ci::ChannelIO) = noop_eof(ci.ch)
 noop_read(ci::ChannelIO, b) = begin x = noop_read(ci.ch); ci.position += sizeof(x); x end
 function noop_write(co::ChannelIO, x)
-    println("noop_write", x, co)
     co.position += sizeof(x)
     noop_write(co.ch, x)
 end
 
 noop_eof(ci::ChannelPipe) = noop_eof(Base.pipe_reader(ci))
 noop_read(ci::ChannelPipe, b) = noop_read(Base.pipe_reader(ci), b)
-noop_write(co::ChannelPipe, b) = noop_read(Base.pipe_writer(co), b)
+noop_write(co::ChannelPipe, b) = noop_write(Base.pipe_writer(co), b)
 
 """
     const NOOP

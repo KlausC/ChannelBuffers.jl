@@ -126,9 +126,12 @@ end
 
 function Base.close(cio::ChannelIO)
     isopen(cio.ch) || return
-    _flush(cio, true)
-    cio.bufsize = 0
-    close(cio.ch)
+    try
+        cio.rw == :W && _flush(cio, true)
+    finally
+        cio.bufsize = 0
+        close(cio.ch)
+    end
     nothing
 end
 
