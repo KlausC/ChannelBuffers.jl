@@ -14,3 +14,4 @@ _static
 _templates
 
 .vscode
+sandbox.jl

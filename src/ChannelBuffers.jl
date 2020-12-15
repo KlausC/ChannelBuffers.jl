@@ -5,6 +5,7 @@ export reverseof
 
 
 include("channelio.jl")
+include("pipelines.jl")
 include("tasks.jl")
 include("specialtasks.jl")
 
