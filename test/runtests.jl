@@ -18,7 +18,8 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
     @testset "ambiguities" begin
         @test detect_ambiguities(ChannelBuffers, Base) |> isempty
     end
-    @testset "ChannelIO" begin include("channelio.jl") end 
+    @testset "ChannelIO" begin include("channelio.jl") end
+    @testset "pipelines" begin include("pipelines.jl") end
     @testset "tasks    " begin include("tasks.jl") end
 end
 

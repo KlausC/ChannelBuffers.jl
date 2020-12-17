@@ -4,7 +4,12 @@
 
 ## Introduction
 
-The `ChannelBuffers` package allows to perform parallel processing within `Julia` in the form of commandline pipes.
+```julia
+    run( `ls` → gzip() → "ls.gz")
+```
+
+The `ChannelBuffers` package integrates the concept of commandline pipelines into `Julia`. It is not only possible to execute external commands in parallel, but to mix them with internal `Task`s and `Threads`.
+
 If the user provides functions `f`, `g`, `h`, of the form
 `f(input::IO, output::IO, args...)`, which read from in input stream and write their
 results to an output stream, they can execute the functions in parallel tasks.
@@ -107,6 +112,8 @@ The files given as strings are appropriately opened and closed.
 
 Element type of `BTaskList` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
 methods, like `wait`, `fetch`, `istask...`.
+
+The full functionality of `Base.pipelines` is extended with the integration of `Base.Cmd` and `BClosure`.
 
 [gha-img]: https://github.com/KlausC/ChannelBuffers.jl/workflows/CI/badge.svg
 [gha-url]: https://github.com/KlausC/ChannelBuffers.jl/actions?query=workflow%3ACI
