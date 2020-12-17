@@ -162,7 +162,6 @@ function vclose(cio::Base.AbstractPipe, write)
 end
 vclose(cio::ChannelIO, write) = write && isopen(cio) ? close(cio) : nothing
 vclose(cio::ChannelPipe, write) = vclose(Base.pipe_writer(cio), write)
-vclose(cio::Channel, write) = isopen(cio) ? close(cio) : nothing
 vclose(cio, write) = nothing
 
 

@@ -10,6 +10,10 @@ tpath(x...) = joinpath(TDIR, x...)
     bcl = closure((cin, cout) -> nothing)
     cmd = `ls`
     file = "xxx"
+    @testset "constructor" begin
+        pl = pipeline(bcl, bcl)
+        @test pl == BClosureList(pl.list)
+    end
     @testset "pipeline(...;stdin=$stdin, stdout=$stdout" for stdin in (nothing, "infile"),
                                                              stdout in (nothing, "outfile")
         if stdin === nothing && stdout === nothing
@@ -59,9 +63,9 @@ end
     open(file, "w") do io
         write(io, text)
     end
-    io = IOBuffer()
+    io = IOContext(IOBuffer())
     run(source(file), stdout = io) |> wait
-    @test String(take!(io)) == text
+    @test String(take!(io.io)) == text
 end
 
 @testset "serialize and deserialize" begin
@@ -94,6 +98,20 @@ end
     @test all(istaskstarted.(tl))
     @test !any(istaskfailed.(tl))
 end
+
+raw"""
+just in case we allow Channel
+@testset "redirect to Channel" begin
+    fin = tpath("xxx0.tgz")
+    fout = Channel(100)
+    pl = pipeline(source(fin), fout)
+    tl = run(pl)
+    while isready(fout)
+        take!(fout)
+    end
+    @test wait(tl) === nothing
+end
+"""
 
 @testset "tar -x $dir" for (decoder, dir) in [(gunzip(), "xxx"), (transcoder(GzipDecompressor()), "xxx2")]
     file = tpath("xxx1.tgz")
@@ -164,6 +182,14 @@ end
     tl = run(pl)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
+end
+
+@testset "file append" begin
+    fin = tpath("xxx4.tgz")
+    fout = tpath("xxa")
+    pl = pipeline(source(fin), stdout=fout, append=true)
+    tl = run(pl)
+    @test wait(tl) === nothing
 end
 
 @testset "noop optimizations" begin

@@ -72,11 +72,12 @@ listnoop(v::Vector, vcmd::ClosureCmd, io::AllIO) = vcat(v[1:end-1], listnoop(v[e
 listnoop(io::AllIO, vcmd::ClosureCmd, v::Vector) = vcat(listnoop(io, v[1]), v[2:end])
 
 # pipeline of one Cmd - in analogy to Base
-function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing)
+function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
     if stdin === nothing && stdout === nothing
         cmd
     else
-        BClosureList([cmd], something(stdin,DEFAULT_IN), something(stdout, DEFAULT_OUT))
+        out = append && stdout isa AbstractString ? Base.FileRedirect(stdout, append) : stdout
+        BClosureList([cmd], something(stdin,DEFAULT_IN), something(out, DEFAULT_OUT))
     end
 end
 
