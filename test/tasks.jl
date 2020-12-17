@@ -47,7 +47,7 @@ end
     @test !any(istaskfailed.(tl))
 end
 
-raw"""
+#=
 just in case we allow Channel
 @testset "redirect to Channel" begin
     fin = tpath("xxx0.tgz")
@@ -59,7 +59,7 @@ just in case we allow Channel
     end
     @test wait(tl) === nothing
 end
-"""
+=#
 
 @testset "tar -x $dir" for (decoder, dir) in [(gunzip(), "xxx"), (transcoder(GzipDecompressor()), "xxx2")]
     file = tpath("xxx1.tgz")
@@ -120,7 +120,7 @@ end
 
 @testset "mixed pipline run" begin
     fout = tpath("xxx.txt")
-    pl = pipeline(`ls ../src`, NOOP, `cat -`, fout)
+    pl = pipeline(`ls ../src`, ChannelBuffers.noop(), `cat -`, fout)
     tl = run(pl)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing

@@ -164,19 +164,18 @@ vclose(cio::ChannelIO, write) = write && isopen(cio) ? close(cio) : nothing
 vclose(cio::ChannelPipe, write) = vclose(Base.pipe_writer(cio), write)
 vclose(cio, write) = nothing
 
-
-function _noop(cin::IO, cout::IO)
-    b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
-    while !noop_eof(cin)
-        x = try
-            x = noop_read(cin, b)
-            noop_write(cout, x)
-        catch ex
-            ex isa InvalidStateException || rethrow(ex)
+function noop()
+    function _noop(cin::IO, cout::IO)
+        b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
+        while !noop_eof(cin)
+            x = try
+                x = noop_read(cin, b)
+                noop_write(cout, x)
+            catch ex
+                ex isa InvalidStateException || rethrow(ex)
+            end
         end
     end
-end
-function noop()
     closure(_noop)
 end
 

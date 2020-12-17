@@ -58,3 +58,8 @@ end
     tl = run(pl)
     @test sprint(show, MIME"text/plain"(), tl) |> length > 10
 end
+
+@testset "file to file" begin
+    pl = "xxx" → "yyy"
+    @test length(pl.list) == 1
+end
