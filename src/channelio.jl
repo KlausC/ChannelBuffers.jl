@@ -23,7 +23,7 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: AbstractChannelIO
         new{V}(ch, rw, buffer, bufsize, 0, 0, false, 0, -1)
     end
 end
- 
+
 const DEFAULT_BUFFER_SIZE = 8192 
 const DEFAULT_CHANNEL_LENGTH = 1
 
