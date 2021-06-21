@@ -49,13 +49,13 @@ or
 ## Predefined closures
 
 ``` julia
-    tarx(dir) # read files in input directory and write to output stream
-    tarc(dir) # read input stream and create files in target directory
+    tarc(dir) # read files in input directory and write to output stream
+    tarx(dir) # read input stream and create files in target directory
     gzip() # read input stream and write compressed data to output stream
     gunzip() # reverse of gzip
     transcoder(::Codec) # generalization for other kinds of TranscoderStreams
     curl(URL) # download file from URL and write to output stream
-    serializer(obj) # write serialized for of input object to output stream
+    serializer(obj) # write serialized form of input object to output stream
     deserializer() # read input stream and reconstruct serialized object
 ```
 
@@ -65,7 +65,7 @@ To create a user defined task, a function with the signature `f(cin::IO, cout::I
 It can be transformed into a `BClosure` object
 
 ``` julia
-        fc = closure(f, args...)::BClosure
+        fc = closure(f, args...) # ::BClosure
 ```
 
 which can be run alone or combined with other closures and input/output specifiers.
@@ -78,12 +78,12 @@ The following `Base` functions are redefined.
 which are used as in
 
 ``` julia
-    tl = run(fc::BClosure)::BTaskList
+    tl = run(fc::BClosure) # ::BTaskList
 
     pl = in → fc → gc → hc → out
-    pl = pipeline(fc, gc, hc, stdin=in stdout=out)::BClosureList
+    pl = pipeline(fc, gc, hc, stdin=in stdout=out) # ::BClosureList
 
-    tl = run(pl::BClosureList)::BTaskList
+    tl = run(pl::BClosureList) # ::BTaskList
 ```
 
 The assignments to `pl` are equivalent.
@@ -92,13 +92,13 @@ The pipelined tasks are considered finished, when the statically last task in th
 The calling task can wait for this event with
 
 ``` julia
-    wait(tl::BTaskList)::Nothing
+    wait(tl::BTaskList) # ::Nothing
 ```
 
 If the last task in the pipeline calculates a value, if can be waited for and obtained by
 
 ``` julia
-    fetch(tl::BTaskList)::Any
+    fetch(tl::BTaskList) # ::Any
 ```
 
 Both `wait` and `fetch` throw `TaskFailedException` if the last task in the list failed.
