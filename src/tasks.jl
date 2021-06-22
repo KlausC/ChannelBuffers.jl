@@ -115,7 +115,7 @@ end
 
 """
     
-(f::Function, args...)
+    closure(f::Function, args...)
 
 Generate a `BClosure` object, which can be used to be started in parallel.
 The function `f` must have the signature `f(cin::IO, cout::IO [, args...])`.
@@ -141,7 +141,7 @@ function _schedule(btd::BClosure, cin, cout)
             vclose(hw, co, true)
         end
     end
-    if Threads.nthreads() <= 1 || Threads.threadid() != 1
+    if use_tasks()
         schedule(Task(task_function))
     else
         Threads.@spawn task_function()
@@ -188,7 +188,11 @@ noop_read(ch::Channel) = take!(ch)
 noop_write(ch::Channel, x) = put!(ch, x)
 
 noop_eof(ci::ChannelIO) = noop_eof(ci.ch)
-noop_read(ci::ChannelIO, b) = begin x = noop_read(ci.ch); ci.position += sizeof(x); x end
+function noop_read(ci::ChannelIO, b)
+    x = noop_read(ci.ch)
+    ci.position += sizeof(x)
+    x
+end
 function noop_write(co::ChannelIO, x)
     co.position += sizeof(x)
     noop_write(co.ch, x)
