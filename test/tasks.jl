@@ -135,6 +135,7 @@ end
     data = "hello world!"
     io = IOBuffer(data)
     tio = open(noop(), "r", io)
+    yield()
     @test tio isa ChannelBuffers.TaskChain
     @test istaskstarted(tio)
     @test !istaskdone(tio)
