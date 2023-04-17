@@ -1,6 +1,12 @@
 
 abstract type AbstractChannelIO <: IO end
 
+import Base: open, close, readbytes!, Redirectable
+
+
+const R = :R
+const W = :W
+
 """
     ChannelIO
 
@@ -9,37 +15,52 @@ channels allowing parallel task pipelining.
 """
 mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: AbstractChannelIO
     ch::Channel{T}
-    rw::Symbol # :R readonly :W writeonly
+    rw::Symbol # R readonly W writeonly
     buffer::T
     bufsize::Int
     woffset::Int
     roffset::Int
     eofpending::Bool
-    position::Int
+    position::Int # offset from stream start of first byte in buffer
     mark::Int
     function ChannelIO(ch::Channel, rw::Symbol, buffer::V, bufsize::Integer) where V
         bufsize > 0 || throw(ArgumentError("minimal buffer size is $bufsize"))
-        rw == :R || rw == :W || throw(ArgumentError("read/write must be :R or :W"))
+        rw == R || rw == W || throw(ArgumentError("read/write must be $R or $W"))
         new{V}(ch, rw, buffer, bufsize, 0, 0, false, 0, -1)
     end
 end
 
-const DEFAULT_BUFFER_SIZE = 8192 
+const DEFAULT_BUFFER_SIZE = 8192
 const DEFAULT_CHANNEL_LENGTH = 1
 
 struct ChannelPipe{T} <: Base.AbstractPipe
     in::ChannelIO{T}
     out::ChannelIO{T}
-    function ChannelPipe(bufsize::Integer=DEFAULT_BUFFER_SIZE)
-        out = ChannelIO(bufsize)
-        in = reverseof(out)
-        new{typeof(in.buffer)}(in, out)
+    function ChannelPipe(cin::ChannelIO{T}, cout::ChannelIO{T}) where T
+        cin.ch === cout.ch || throw(ArgumentError("cin and cout must share same Channel"))
+        iswritable(cin) || throw(ArgumentError("cin must be writable"))
+        isreadable(cout) || throw(ArgumentError("cout must be readable"))
+        new{T}(cin, cout)
     end
+end
+
+function ChannelPipe(bufsize::Integer=DEFAULT_BUFFER_SIZE)
+    out = ChannelIO(bufsize)
+    in = reverseof(out)
+    ChannelPipe(in, out)
+end
+
+function ChannelPipe(cio::ChannelIO{T}) where T
+    ciow = reverseof(cio)
+    if isreadable(ciow)
+        ciow, cio = cio, ciow
+    end
+    ChannelPipe(ciow, cio)
 end
 
 const AllChannelIO = Union{ChannelIO,ChannelPipe}
 
-function ChannelIO(ch::Channel, rw::Symbol=:R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
+function ChannelIO(ch::Channel, rw::Symbol=R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, rw, zeros(UInt8, 0), bufsize)
 end
 
@@ -50,12 +71,12 @@ function ChannelIO(rw::Symbol, bufsize::Integer=DEFAULT_BUFFER_SIZE)
 end
 
 function ChannelIO(bufsize::Integer=DEFAULT_BUFFER_SIZE)
-    ChannelIO(:R, bufsize)
+    ChannelIO(R, bufsize)
 end
 
-# create ChannelIO with smae channel and reverse read/write indicator
+# create ChannelIO with same channel and reverse read/write indicator
 function reverseof(cio::ChannelIO)
-    rev = cio.rw == :R ? :W : :R
+    rev = cio.rw == R ? W : R
     ChannelIO(cio.ch, rev, cio.bufsize)
 end
 
@@ -63,12 +84,23 @@ function Base.isopen(cio::ChannelIO)
     isopen(cio.ch) || isready(cio.ch)
 end
 
-function throw_inv(cio::ChannelIO)
-    throw(InvalidStateException("channel is $(cio.rw)-only", cio.rw))
+@noinline function throw_inv(cio::ChannelIO)
+    text = iswritable(cio) && !isopenwritable(cio) ? "closed" : "$(cio.rw)-only"
+    throw(InvalidStateException("$(cio.rw)-channel is $text", cio.rw))
+end
+
+@noinline function throw_closed(cio::ChannelIO)
+    throw(InvalidStateException("channel is closed.", cio.rw))
+end
+
+function vput!(cio::ChannelIO{T}, b::T) where T
+    put!(cio.ch, b)
+    isopen(cio.ch) || throw_closed(cio)
+    b
 end
 
 function Base.write(cio::ChannelIO, byte::UInt8)
-    cio.rw == :W || throw_inv(cio)
+    isopenwritable(cio) || throw_inv(cio)
     n = length(cio.buffer)
     cio.woffset += 1
     if cio.woffset > n
@@ -81,22 +113,23 @@ function Base.write(cio::ChannelIO, byte::UInt8)
 end
 
 function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    cio.rw == :W || throw_inv(cio)
+    isopenwritable(cio) || throw_inv(cio)
     k = cio.woffset
     if length(cio.buffer) < cio.bufsize
         resize!(cio.buffer, cio.bufsize)
     end
+    bufsize = length(cio.buffer)
     d = pointer(cio.buffer, k+1)
     s = pp
     n = Int(nn)
-    while n + k >= cio.bufsize
-        i = cio.bufsize - k
+    while n + k >= bufsize
+        i = bufsize - k
         unsafe_copyto!(d, s, i)
-        put!(cio.ch, cio.buffer)
-        cio.position += cio.woffset
-        cio.buffer = getbuffer(cio)
+        vput!(cio, cio.buffer)
+        cio.position += bufsize
+        newbuffer!(cio)
+        bufsize = length(cio.buffer)
         d = pointer(cio.buffer, 1)
-        cio.woffset = 0
         k = 0
         n -= i
         s += i
@@ -109,52 +142,81 @@ function Base.unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
 end
 
 function Base.flush(cio::ChannelIO)
-    cio.rw == :W || return nothing
+    isopenwritable(cio) || return nothing
     _flush(cio, false)
 end
 
-function _flush(cio::ChannelIO, eofsend::Bool)
-    cio.woffset == 0 && !eofsend && return
+function _flush(cio::ChannelIO, close::Bool)
+    cio.woffset == 0 && !close && return
     resize!(cio.buffer, cio.woffset)
-    put!(cio.ch, cio.buffer)
-    cio.position += cio.woffset
-    cio.buffer = getbuffer(cio)
-    cio.woffset = 0
-    cio.roffset = 0
+    try
+        vput!(cio, cio.buffer)
+    catch
+        !close && rethrow()
+    finally
+        cio.position += cio.woffset
+        newbuffer!(cio)
+    end
+    nothing
+end
+
+function destroy(cio::ChannelIO)
+    isreadable(cio) || return nothing
+    _destroy(cio)
+end
+
+function _destroy(cio::ChannelIO)
+    lock(ch)
+    try
+        while isready(ch)
+            take!(ch)
+        end
+    catch
+        # ignore
+    finally
+        cio.eofpending = true
+        close(ch)
+        unlock(ch)
+    end
     nothing
 end
 
 function Base.close(cio::ChannelIO)
     isopen(cio.ch) || return
     try
-        cio.rw == :W && _flush(cio, true)
+        if isreadable(cio)
+            _destroy(cio)
+        else
+            _flush(cio, true)
+        end
+    catch
+        # ignore error during close
     finally
-        cio.bufsize = 0
         close(cio.ch)
     end
     nothing
 end
 
 function Base.peek(cio::ChannelIO)
-    cio.rw  == :R || throw_inv(cio)
+    isreadable(cio) || throw_inv(cio)
     eof(cio) && throw(EOFError())
     cio.buffer[cio.roffset + 1]
 end
 function Base.read(cio::ChannelIO, ::Type{UInt8})
-    cio.rw == :R || throw_inv(cio)
+    isreadable(cio) || throw_inv(cio)
     eof(cio) && throw(EOFError())
     c = cio.buffer[cio.roffset += 1]
 end
 
 function Base.bytesavailable(cio::ChannelIO)
-    cio.rw  == :R || throw_inv(cio)
+    isreadable(cio) || throw_inv(cio)
     n = cio.woffset - cio.roffset
     if n > 0
         return Int(n)
     else
         cio.eofpending && return 0
         cio.woffset = 0
-        cio.roffset = 0
+        cio.roffset = length(cio.buffer)
     end
     if isready(cio.ch)
         takebuffer!(cio)
@@ -163,10 +225,10 @@ function Base.bytesavailable(cio::ChannelIO)
 end
 
 function Base.eof(cio::ChannelIO)
-    cio.rw  == :R || throw_inv(cio)
-    cio.roffset < cio.woffset && return false
+    isreadable(cio) || throw_inv(cio)
+    cio.roffset < length(cio.buffer) && return false
     takebuffer!(cio)
-    return cio.eofpending && cio.roffset >= cio.woffset
+    return cio.eofpending && cio.roffset >= length(cio.buffer)
 end
 
 function Base.readbytes!(cio::ChannelIO, b::Vector{UInt8}, nb=length(b); all::Bool=true)
@@ -180,19 +242,18 @@ function Base.readbytes!(cio::ChannelIO, b::Vector{UInt8}, nb=length(b); all::Bo
         return Int(r)
     end
     while r < nb && !eof(cio)
-        n = min(nb, r + 1024)
+        n = min(nb, r + DEFAULT_BUFFER_SIZE)
         if n > length(b)
             resize!(b, n)
         end
-        d = pointer(b, r + 1)
-        k = Base.unsafe_read(cio, d, n - r)
+        k = Base.unsafe_read(cio, pointer(b, r + 1), n - r)
         r += k
     end
     return Int(r)
 end
 
 function Base.unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    cio.rw  == :R || throw_inv(cio)
+    isreadable(cio) || throw_inv(cio)
     p = pp
     n = Int(nn)
     while n > 0 && !eof(cio)
@@ -208,73 +269,90 @@ function Base.unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
     Int(nn - n)
 end
 
-function getbuffer(cio::ChannelIO)
+function newbuffer!(cio::ChannelIO)
     #Vector{UInt8}(undef, cio.bufsize)
-    zeros(UInt8, cio.bufsize)
+    cio.buffer = zeros(UInt8, cio.bufsize)
+    cio.roffset = 0
+    cio.woffset = 0
 end
 
 function takebuffer!(cio::ChannelIO)
-    if !isopen(cio.ch) && !isready(cio.ch)
-        cio.eofpending = true
-        cio.woffset = 0
-    else
+    bufsize = length(cio.buffer)
+    if isopen(cio.ch) || isready(cio.ch)
         try
-            cio.buffer = take!(cio.ch)
-            cio.woffset = length(cio.buffer)
-            cio.position += cio.woffset
-            cio.eofpending |= cio.woffset == 0
+            buffer = take!(cio.ch)
         catch
-            cio.woffset = 0
-            cio.eofpending = true
+            buffer = UInt8[]
         end
+    else
+        buffer = UInt8[]
     end
     cio.roffset = 0
+    cio.position += bufsize
+    cio.buffer = buffer
+    cio.woffset = length(cio.buffer)
+    cio.eofpending |= cio.woffset == 0
     cio.woffset
 end
 
-Base.isreadable(cio::ChannelIO) = cio.rw == :R
-Base.iswritable(cio::ChannelIO) = cio.rw == :W
+Base.isreadable(cio::ChannelIO) = cio.rw == R
+Base.iswritable(cio::ChannelIO) = !isreadable(cio)
+isopenwritable(cio::ChannelIO) = iswritable(cio) && isopen(cio.ch)
 
 function Base.position(cio::ChannelIO)
-    cio.position + (cio.rw == :W ? cio.woffset : cio.roffset - cio.woffset)
+    cio.position + (iswritable(cio) ? cio.woffset : cio.roffset)
 end
 
-Base.seek(cio::ChannelIO, p) = isreadable(cio) ? seek_r(cio, p) : seek_w(cio, p)
-
-function seek_r(cio::ChannelIO, p::Integer)
-    if cio.position - cio.woffset <= p <= cio.position
-        cio.roffset = p - cio.position + cio.woffset
+function Base.seek(cio::ChannelIO, p::Integer)
+    n = length(cio.buffer)
+    seek_start = cio.position
+    seek_end = cio.position + n
+    pp = p - position(cio)
+    if seek_start <= p < seek_end
+        if isreadable(cio)
+            cio.roffset += pp
+        else
+            cio.woffset += pp
+        end
     else
-        boundaries = "$(cio.position - cio.woffset) <= $p <= $(cio.position)"
-        throw(ArgumentError("cannot seek beyond positions ($boundaries)"))
-    end
-    cio
-end
-function seek_w(cio::ChannelIO, p::Integer)
-    if cio.position + cio.roffset <= p <= cio.position + cio.woffset
-        cio.woffset = p - cio.position
-    else
-        boundaries = "$(cio.position + cio.roffset) <= $p <= $(cio.woffset+cio.position)"
+        boundaries = "$(seek_start) <= $p < $(seek_end)"
         throw(ArgumentError("cannot seek beyond positions ($boundaries)"))
     end
     cio
 end
 
 function Base.show(io::IO, cio::ChannelIO)
-    print(io, "ChannelIO(:", cio.rw, ", ", cio.woffset - cio.roffset, " bytes available) position ", cio.position, " (", cio.ch.state, ")")
+    print(io, "ChannelIO(", cio.rw, ", ")
+    if isreadable(cio)
+        print(io, channel_length(cio), " → ", buffer_length(cio))
+    else
+        print(io, buffer_length(cio), " → ", channel_length(cio))
+    end
+    print(io, ", position ", position(cio), ", ", channel_state(cio), ")")
 end
 
-function Base.show(io::IO, cp::ChannelPipe)
-    write(io, "ChannelPipe(")
-    show(io, cp.in)
-    write(io, " => ", string(buffered_length(cp)), " bytes buffered => ")
-    show(io, cp.out)
-    write(io, ")")
+function Base.show(io::IO, cio::ChannelPipe)
+    print(io, "ChannelPipe(", )
+    print(io, buffer_length(cio.in), " → ", channel_length(cio), " → ")
+    print(io, buffer_length(cio.out), ", ", channel_state(cio), ")")
 end
 
-buffered_length(ch::Channel) = sum(length.(ch.data))
-buffered_length(cio::ChannelIO) = buffered_length(cio.ch)
-buffered_length(cp::ChannelPipe) = buffered_length(cp.in)
+channel_length(ch::Channel) = sum(length.(ch.data))
+channel_length(cio::ChannelIO) = channel_length(cio.ch)
+channel_length(cp::ChannelPipe) = channel_length(cp.in)
+channel_state(ch::Channel) = ch.state
+function channel_state(cio::ChannelIO)
+    cs = channel_state(cio.ch)
+    if cs == :closed
+        cs = isreadable(cio) && eof(cio) ? :eof : cs
+    end
+    cs
+end
+channel_state(cio::ChannelPipe) = channel_state(cio.out)
+
+function buffer_length(cio::ChannelIO)
+    isreadable(cio) ? length(cio.buffer) - cio.roffset : cio.woffset
+end
 
 Base.write(io::ChannelPipe, x::UInt8) = write(io.in, x)
 Base.unsafe_write(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_write(io.in, p, n)

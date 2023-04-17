@@ -121,7 +121,7 @@ end
         @test peek(cin) == i
         @test read(cin, UInt8) == i
     end
-    @test_throws EOFError peek(cin) 
+    @test_throws EOFError peek(cin)
     wait(t)
 end
 
@@ -178,7 +178,7 @@ end
     @test position(p.in) == 4
     flush(p)
     @test position(p.in) == 4
-    @test_throws Exception seek(p.in, 5)
+    @test_throws Exception seek(p.in, 3)
     @test peek(p, Char) == read(p, Char)
     @test_throws Exception seek(p.out, 5)
     close(p.in)

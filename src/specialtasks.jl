@@ -12,7 +12,7 @@ export serializer, deserializer
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
 function tarc(dir::AbstractString)
-    _tarc(cin::IO,cout::IO, dir::AbstractString) = Tar.create(dir, cout)
+    _tarc(cin::IO, cout::IO, dir::AbstractString) = Tar.create(dir, cout)
     closure(_tarc, dir)
 end
 
@@ -63,7 +63,7 @@ function transcoder(codec::TranscodingStreams.Codec)
         TranscodingStreams.finalize(codec)
     end
     closure(_transcoder)
-end   
+end
 
 function source(src::UIO)
     function _source(cin::IO, cout::IO, src::UIO)

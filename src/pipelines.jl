@@ -4,7 +4,7 @@
 Store function and arguments. The signature of the function must
 be like `f(cin::IO, cout::IO, args...)`.
 """
-struct BClosure{F<:Function,Args<:Tuple}
+struct BClosure{F<:Function,Args<:Tuple} # <: Base.AbstractCmd resolve ambis first!
     f::F
     args::Args
 end
@@ -45,9 +45,9 @@ listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, 
 listcombine(v::Vector, cmd::ClosureCmd) = isempty(v) ? [cmd] : listcombine(v, last(v), cmd)
 listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
 listcombine(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
-listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right) 
+listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right)
 listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], listcombine(last(list), right))
-listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
+listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list)
 listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(listcombine(left, first(list)), list[2:end])
 
 function listcombine(left::Vector, right::Vector)

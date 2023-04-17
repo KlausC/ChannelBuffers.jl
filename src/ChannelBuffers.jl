@@ -1,8 +1,7 @@
 module ChannelBuffers
 
 export ChannelIO, ChannelPipe, →
-export reverseof
-
+export reverseof, noop
 
 include("channelio.jl")
 include("pipelines.jl")
