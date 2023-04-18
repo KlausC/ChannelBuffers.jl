@@ -140,6 +140,7 @@ end
     @test istaskstarted(tio)
     @test !istaskdone(tio)
     @test read(tio, String) == data
+    wait(tio)
     @test istaskstarted(tio)
     @test istaskdone(tio)
     @test !istaskfailed(tio)
@@ -150,18 +151,20 @@ end
     @test position(cio) == length(data)
 end
 
-#=
 @testset "open task chain for writing" begin
     io = IOBuffer()
-    tio = open(gzip() | noop() | gunzip(), io, write=true)
-    for i = 1:5
-        println(tio, repeat("abc ", 10))
+    save_tio = nothing
+    open(gzip() | noop() | gunzip(), io, write=true) do tio
+        for i = 1:5
+            println(tio, repeat("abc ", 10))
+        end
+        @test !istaskdone(tio)
+        save_tio = tio
     end
-    close(tio)
+    @test istaskdone(save_tio)
     res = String(take!(io))
     @test res == repeat(repeat("abc ", 10) * "\n", 5)
 end
-=#
 
 @testset "open TaskChain read incomplete" begin
     data = """

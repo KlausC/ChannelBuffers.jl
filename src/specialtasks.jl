@@ -12,17 +12,17 @@ export serializer, deserializer
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
 function tarc(dir::AbstractString)
-    _tarc(cin::IO, cout::IO, dir::AbstractString) = Tar.create(dir, cout)
+    _tarc(::IO, cout::IO, dir::AbstractString) = Tar.create(dir, cout)
     closure(_tarc, dir)
 end
 
 function tarx(dir::AbstractString)
-    _tarx(cin::IO, cout::IO, dir::AbstractString) = Tar.extract(cin, dir)
+    _tarx(cin::IO, ::IO, dir::AbstractString) = Tar.extract(cin, dir)
     closure(_tarx, dir)
 end
 
 function curl(url::AbstractString)
-    _curl(cin::IO, cout::IO, url::AbstractString) = Downloads.download(url, cout)
+    _curl(::IO, cout::IO, url::AbstractString) = Downloads.download(url, cout)
     closure(_curl, url)
 end
 
@@ -66,7 +66,7 @@ function transcoder(codec::TranscodingStreams.Codec)
 end
 
 function source(src::UIO)
-    function _source(cin::IO, cout::IO, src::UIO)
+    function _source(::IO, cout::IO, src::UIO)
         io = src isa IO ? src : io = open(src, "r")
         try
             buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
@@ -82,7 +82,7 @@ function source(src::UIO)
 end
 
 function destination(dst::UIO)
-    function _destination(cin::IO, cout::IO, dst::UIO)
+    function _destination(cin::IO, ::IO, dst::UIO)
         buffer = Vector{UInt8}(undef, DEFAULT_READ_BUFFER_SIZE)
         io = dst isa IO ? dst : open(dst, "w")
         try
@@ -98,11 +98,11 @@ function destination(dst::UIO)
 end
 
 function serializer(obj::Any)
-    _serializer(cin::IO, cout::IO, obj::Any) = Serialization.serialize(cout, obj)
+    _serializer(::IO, cout::IO, obj::Any) = Serialization.serialize(cout, obj)
     closure(_serializer, obj)
 end
 
 function deserializer()
-    _deserializer(cin::IO, cout::IO) = Serialization.deserialize(cin)
+    _deserializer(cin::IO, ::IO) = Serialization.deserialize(cin)
     closure(_deserializer)
 end

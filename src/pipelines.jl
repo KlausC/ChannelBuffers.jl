@@ -4,12 +4,10 @@
 Store function and arguments. The signature of the function must
 be like `f(cin::IO, cout::IO, args...)`.
 """
-struct BClosure{F<:Function,Args<:Tuple} # <: Base.AbstractCmd resolve ambis first!
+struct BClosure{F<:Function,Args<:Tuple} # <: AbstractCmd resolve ambis first!
     f::F
     args::Args
 end
-
-import Base: |, AbstractCmd, pipeline
 
 # used for output redirection
 const UIO = Union{IO,AbstractString}
@@ -76,7 +74,7 @@ function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
     if stdin === nothing && stdout === nothing
         cmd
     else
-        out = append && stdout isa AbstractString ? Base.FileRedirect(stdout, append) : stdout
+        out = append && stdout isa AbstractString ? FileRedirect(stdout, append) : stdout
         BClosureList([cmd], something(stdin,DEFAULT_IN), something(out, DEFAULT_OUT))
     end
 end

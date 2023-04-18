@@ -3,20 +3,20 @@ struct BTask{X,T}
     task::T
     BTask{X}(t::T) where {X,T} = new{X,T}(t)
 end
-Base.show(io::IO, m::MIME"text/plain", bt::BTask) = show(io, m, bt.task)
-Base.fetch(bt::BTask) = fetch(bt.task)
-Base.wait(bt::BTask) = wait(bt.task)
-Base.istaskstarted(bt::BTask)  = istaskstarted(bt.task)
-Base.istaskdone(bt::BTask) = istaskdone(bt.task)
-Base.istaskfailed(bt::BTask) = istaskfailed(bt.task)
+show(io::IO, m::MIME"text/plain", bt::BTask) = show(io, m, bt.task)
+fetch(bt::BTask) = fetch(bt.task)
+wait(bt::BTask) = wait(bt.task)
+istaskstarted(bt::BTask)  = istaskstarted(bt.task)
+istaskdone(bt::BTask) = istaskdone(bt.task)
+istaskfailed(bt::BTask) = istaskfailed(bt.task)
 
-function Base.fetch(bt::BTask{T,<:Base.Process}) where T
+function fetch(bt::BTask{T,<:Process}) where T
     wait(bt)
     bt.task.exitcode
 end
-Base.istaskstarted(bt::BTask{T,<:Base.Process}) where T = true
-Base.istaskdone(bt::BTask{T,<:Base.Process}) where T = process_exited(bt.task)
-function Base.istaskfailed(bt::BTask{T,<:Base.Process}) where T
+istaskstarted(bt::BTask{T,<:Process}) where T = true
+istaskdone(bt::BTask{T,<:Process}) where T = process_exited(bt.task)
+function istaskfailed(bt::BTask{T,<:Process}) where T
     process_exited(bt.task) && bt.task.exitcode != 0
 end
 
@@ -29,7 +29,7 @@ reading and writing. Created by a call to `[open|run](::BClosureList)`.
 
 An analogue of `ProcessChain`.
 """
-struct TaskChain{T<:Vector{<:BTask},IN,OUT} <: Base.AbstractPipe
+struct TaskChain{T<:Vector{<:BTask},IN,OUT} <: AbstractPipe
     processes::T
     in::IN
     out::OUT
@@ -40,7 +40,7 @@ end
 
 Wait for the last task in the list to finish.
 """
-function Base.wait(tv::TaskChain, ix::Integer=0)
+function wait(tv::TaskChain, ix::Integer=0)
     n = length(tv.processes)
     i = ix == 0 ? n : Int(ix)
     0 < n || return nothing
@@ -54,7 +54,7 @@ end
 Wait for last Task in to finish, then return its result value.
 If the task fails with an exception, a `TaskFailedException` (which wraps the failed task) is thrown.
 """
-function Base.fetch(tv::TaskChain, ix::Integer=0)
+function fetch(tv::TaskChain, ix::Integer=0)
     n = length(tv)
     i = ix == 0 ? n : Int(ix)
     0 < n || throw(ArgumentError("cannot fetch from empty task list"))
@@ -62,26 +62,39 @@ function Base.fetch(tv::TaskChain, ix::Integer=0)
     @inbounds fetch(tv.processes[i])
 end
 
-function Base.show(io::IO, m::MIME"text/plain", tv::TaskChain)
+"""
+    close(::TaskChain)
+
+First close pipe_writer (the device the pipe is reading from).
+That should flush all pending data, giving an EOF to the fist task which should exit.
+Then wait for the last task to be done.
+The pipe_reader would be closed automatically before the completion of the last task.
+"""
+function close(tv::TaskChain)
+    close(pipe_writer(tv))
+    wait(tv)
+end
+
+function show(io::IO, m::MIME"text/plain", tv::TaskChain)
     for t in tv.processes
         show(io, m, t)
         println(io)
     end
 end
 
-Base.length(tv::TaskChain) = length(tv.processes)
-Base.getindex(tv::TaskChain, i::Integer) = getindex(tv.processes, i)
+length(tv::TaskChain) = length(tv.processes)
+getindex(tv::TaskChain, i::Integer) = getindex(tv.processes, i)
 
 #= iteration and broadcasting delegated to .processes
-Base.iterate(tv::TaskChain, s...) = iterate(tv.processes, s...)
-Base.broadcastable(tv::TaskChain) = tv.processes
-Base.lastindex(tv::TaskChain) = lastindex(tv.processes)
-Base.firstindex(tv::TaskChain) = firstindex(tv.processes)
+iterate(tv::TaskChain, s...) = iterate(tv.processes, s...)
+broadcastable(tv::TaskChain) = tv.processes
+lastindex(tv::TaskChain) = lastindex(tv.processes)
+firstindex(tv::TaskChain) = firstindex(tv.processes)
 =#
 
-Base.istaskdone(tv::TaskChain) = all(istaskdone.(tv.processes))
-Base.istaskfailed(tv::TaskChain) = any(istaskfailed.(tv.processes))
-Base.istaskstarted(tv::TaskChain) = all(istaskstarted.(tv.processes))
+istaskdone(tv::TaskChain) = all(istaskdone.(tv.processes))
+istaskfailed(tv::TaskChain) = any(istaskfailed.(tv.processes))
+istaskstarted(tv::TaskChain) = all(istaskstarted.(tv.processes))
 
 """
     task_code, task_cin, task_cout, task_function, task_args
@@ -100,7 +113,7 @@ task_args(t::BTask) = task_code(t).btd.args
 
 Start parallel task redirecting stdin and stdout
 """
-function Base.run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+function run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     run(BClosureList([bt], stdin, stdout))
 end
 
@@ -109,11 +122,11 @@ end
 
 Start all parallel tasks defined in list, io redirection defaults are defined in the list
 """
-function Base.run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     T = use_tasks() ? :Task : :Threat
     list = btdl.list
     n = length(list)
-    tv = Vector{Union{Task,Base.AbstractPipe}}(undef, n)
+    tv = Vector{Union{Task,AbstractPipe}}(undef, n)
     cin0 = stdin === DEFAULT_IN ? btdl.cin : stdin
     cout0 = stdout === DEFAULT_OUT ? btdl.cout : stdout
     cout = to_pipe(cout0)
@@ -147,9 +160,9 @@ end
 
 to_pipe(cio::ChannelIO) = ChannelPipe(cio)
 to_pipe(cio) = cio
-pipe_reader2(cio::Base.AbstractPipe) = pipe_reader2(Base.pipe_reader(cio))
+pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
 pipe_reader2(cio) = cio
-pipe_writer2(cio::Base.AbstractPipe) = pipe_writer2(Base.pipe_writer(cio))
+pipe_writer2(cio::AbstractPipe) = pipe_writer2(pipe_writer(cio))
 pipe_writer2(cio) = cio
 
 """
@@ -171,14 +184,22 @@ end
 # schedule single task
 function _schedule(btd::BClosure, cin, cout)
     function task_function()
-        ci, hr = vopen(cin)
-        co, hw = vopen(cout, true)
+        ci = vopen(cin, false)
+        co = vopen(cout, true)
         try
             res = btd.f(ci, co, btd.args...)
             res
+        catch
+            #= print stack trace to stderr
+            for (exc, bt) in current_exceptions()
+                showerror(stderr, exc, bt)
+                println(stderr)
+            end
+            =#
+            rethrow()
         finally
-            vclose(hr, ci)
-            vclose(hw, co, true)
+            vclose(here(cin), ci, false)
+            vclose(here(cout), co, true)
         end
     end
     if use_tasks()
@@ -188,21 +209,23 @@ function _schedule(btd::BClosure, cin, cout)
     end
 end
 
-vopen(file::AbstractString, write=false) = (open(file, write=write), true)
-vopen(fr::Base.FileRedirect, write=false) = (open(fr.filename, write=write, append=fr.append), true)
-vopen(cio::Any, write=false) = (cio, false)
+here(::Union{AbstractString,FileRedirect}) = true
+here(::Any) = false
+vopen(file::AbstractString, write::Bool) = open(file; write)
+vopen(fr::FileRedirect, write::Bool) = open(fr.filename; write, append=fr.append)
+vopen(cio::Any, ::Bool) = cio
 
-vclose(here::Bool, cio, write=false) = here ? close(cio) : vclose(cio, write)
+vclose(here::Bool, cio, write::Bool) = here ? close(cio) : vclose(cio, write)
 
-vclose(::Base.TTY, write) = nothing # must not be changed to avoid REPL kill
-vclose(cio::IOContext, write) = vclose(cio.io, write)
-function vclose(cio::Base.AbstractPipe, write)
-    w = Base.pipe_writer(cio)
+vclose(::TTY, write::Bool) = nothing # must not be changed to avoid REPL kill
+vclose(cio::IOContext, write::Bool) = vclose(cio.io, write)
+function vclose(cio::AbstractPipe, write::Bool)
+    w = pipe_writer(cio)
     write && isopen(w) ? close(w) : nothing
 end
-vclose(cio::ChannelIO, write) = close(cio)
-vclose(cio::ChannelPipe, write) = vclose(Base.pipe_writer(cio), write)
-vclose(::Any, write) = nothing
+vclose(cio::ChannelIO, ::Bool) = close(cio)
+vclose(cio::ChannelPipe, write::Bool) = vclose(pipe_writer(cio), write)
+vclose(::IO, ::Bool) = nothing
 
 # NOOP task - move cin to cout
 function _noop()
@@ -239,9 +262,9 @@ function noop_write(co::ChannelIO, x)
     noop_write(co.ch, x)
 end
 
-noop_eof(ci::ChannelPipe) = noop_eof(Base.pipe_reader(ci))
-noop_read(ci::ChannelPipe, b) = noop_read(Base.pipe_reader(ci), b)
-noop_write(co::ChannelPipe, b) = noop_write(Base.pipe_writer(co), b)
+noop_eof(ci::ChannelPipe) = noop_eof(pipe_reader(ci))
+noop_read(ci::ChannelPipe, b) = noop_read(pipe_reader(ci), b)
+noop_write(co::ChannelPipe, b) = noop_write(pipe_writer(co), b)
 
 """
     const NOOP
@@ -261,7 +284,7 @@ function open(bt::BClosure, mode::AbstractString, stdio::Redirectable=devnull)
     open(bt, stdio; read, write)
 end
 
-function Base.open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
+function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
     if read && write && stdio != devnull
         throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
     end
@@ -270,5 +293,5 @@ function Base.open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=
     run(pipeline(cin, cmds.list..., cout))
 end
 
-Base.pipe_reader(tio::TaskChain) = tio.out
-Base.pipe_writer(tio::TaskChain) = tio.in
+pipe_reader(tio::TaskChain) = tio.out
+pipe_writer(tio::TaskChain) = tio.in

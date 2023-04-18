@@ -153,12 +153,15 @@ end
     @test !iswritable(p.out)
     write(p, "test data")
     flush(p)
-    @test eof(p) === false
+    @test !eof(p)
     @test read(p, 9) |> length == 9
     write(p, 123)
     close(p.in)
     b = zeros(UInt8, 100)
-    @test readbytes!(p, b, 8) == 8
+    @test readbytes!(p, b, 5) == 5
+    @test !eof(p) # after close - not all bytes read
+    read(p, String)
+    @test eof(p) # all bytes read now
 end
 
 @testset "show Channel objects" begin

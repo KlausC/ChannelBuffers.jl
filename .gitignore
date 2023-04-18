@@ -4,6 +4,7 @@
 
 # ignore newly added matrices 
 Manifest.toml
+JuliaSysimage.so
 
 *.mem
 *.cov
