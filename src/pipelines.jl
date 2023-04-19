@@ -9,14 +9,7 @@ struct BClosure{F<:Function,Args<:Tuple} # <: AbstractCmd resolve ambis first!
     args::Args
 end
 
-# used for output redirection
-const UIO = Union{IO,AbstractString}
-const AllIO = Union{UIO,AllChannelIO}
-const DEFAULT_IN = devnull
-const DEFAULT_OUT = devnull
-
 const ClosureCmd = Union{BClosure,AbstractCmd}
-
 # List of BClosure objects and io redirections
 struct BClosureList{In,Out}
     list::Vector{ClosureCmd}
@@ -27,8 +20,16 @@ struct BClosureList{In,Out}
     end
 end
 BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
+# used for output redirection
+const UIO = Union{IO,AbstractString}
+const AllIO = Union{UIO,AllChannelIO}
+const DEFAULT_IN = devnull
+const DEFAULT_OUT = devnull
 
-|(left::Union{BClosure,BClosureList}, right::Union{BClosure,BClosureList}) = →(left, right)
+const BClosureAndList = Union{BClosure,BClosureList}
+
+|(left::BClosureAndList, right::BClosureAndList) = →(left, right)
+
 """
     a → b  (\rightarrow operator)
 

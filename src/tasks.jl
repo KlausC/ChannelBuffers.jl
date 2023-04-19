@@ -108,6 +108,13 @@ task_cout(t::BTask) = task_code(t).cout
 task_function(t::BTask) = task_code(t).btd.f
 task_args(t::BTask) = task_code(t).btd.args
 
+to_pipe(cio::ChannelIO) = ChannelPipe(cio)
+to_pipe(cio) = cio
+pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
+pipe_reader2(cio) = cio
+pipe_writer2(cio::AbstractPipe) = pipe_writer2(pipe_writer(cio))
+pipe_writer2(cio) = cio
+
 """
     run(BClosure; stdin=devnull, stdout=devnull)
 
@@ -158,12 +165,36 @@ function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     TaskChain(BTask{T}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
 end
 
-to_pipe(cio::ChannelIO) = ChannelPipe(cio)
-to_pipe(cio) = cio
-pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
-pipe_reader2(cio) = cio
-pipe_writer2(cio::AbstractPipe) = pipe_writer2(pipe_writer(cio))
-pipe_writer2(cio) = cio
+function readwrite_from_mode(mode::AbstractString)
+    read = mode == "r" || mode == "w+" || mode == "r+"
+    write = mode == "w" || mode == "w+" || mode == "r+"
+    read, write
+end
+
+function open(bt::BClosureAndList, mode::AbstractString, stdio::Redirectable=devnull)
+    read, write = readwrite_from_mode(mode)
+    open(bt, stdio; read, write)
+end
+function open(f::Function, bt::BClosureAndList, mode::AbstractString, stdio::Redirectable=devnull)
+    read, write = readwrite_from_mode(mode)
+    open(f, bt, stdio; read, write)
+end
+
+function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
+    if read && write && stdio != devnull
+        throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
+    end
+    cout = read ? ChannelIO() : stdio
+    cin = write ? ChannelIO(W) : stdio
+    run(pipeline(cin, cmds.list..., cout))
+end
+
+function open(bt::BClosure, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
+    open(BClosureList([bt]), stdio; read, write)
+end
+function open(f::Function, bt::BClosure, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
+    open(f, BClosureList([bt]), stdio; read, write)
+end
 
 """
 
@@ -227,71 +258,22 @@ vclose(cio::ChannelIO, ::Bool) = close(cio)
 vclose(cio::ChannelPipe, write::Bool) = vclose(pipe_writer(cio), write)
 vclose(::IO, ::Bool) = nothing
 
-# NOOP task - move cin to cout
-function _noop()
+# NOOP task - copy cin to cout
+function noop()
     function _noop(cin::IO, cout::IO)
-        b = Vector{UInt8}(undef, DEFAULT_BUFFER_SIZE)
-        while !noop_eof(cin)
-            x = try
-                x = noop_read(cin, b)
-                noop_write(cout, x)
-            catch ex
-                ex isa InvalidStateException || rethrow(ex)
-            end
+        while !eof(cin)
+            write(cout, read(cin))
         end
     end
     closure(_noop)
 end
-
-noop_eof(ci::IO) = eof(ci)
-noop_read(ci::IO, b) = b[1:readbytes!(ci, b)]
-noop_write(co::IO, x) = write(co, x)
-
-noop_eof(ch::Channel) = isempty(ch) && !isopen(ch)
-noop_read(ch::Channel) = take!(ch)
-noop_write(ch::Channel, x) = put!(ch, x)
-
-noop_eof(ci::ChannelIO) = noop_eof(ci.ch)
-function noop_read(ci::ChannelIO, b)
-    x = noop_read(ci.ch)
-    ci.position += sizeof(x)
-    x
-end
-function noop_write(co::ChannelIO, x)
-    co.position += sizeof(x)
-    noop_write(co.ch, x)
-end
-
-noop_eof(ci::ChannelPipe) = noop_eof(pipe_reader(ci))
-noop_read(ci::ChannelPipe, b) = noop_read(pipe_reader(ci), b)
-noop_write(co::ChannelPipe, b) = noop_write(pipe_writer(co), b)
 
 """
     const NOOP
 
 A BClosure which copies input to output unmodified.
 """
-const NOOP = _noop()
-noop() = NOOP
-
-function open(bt::BClosure, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
-    open(BClosureList([bt]), stdio; read, write)
-end
-
-function open(bt::BClosure, mode::AbstractString, stdio::Redirectable=devnull)
-    read = mode == "r" || mode == "w+"
-    write = mode == "w" || mode == "r+"
-    open(bt, stdio; read, write)
-end
-
-function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
-    if read && write && stdio != devnull
-        throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
-    end
-    cout = read ? ChannelIO() : stdio
-    cin = write ? ChannelIO(W) : stdio
-    run(pipeline(cin, cmds.list..., cout))
-end
+NOOP = noop()
 
 pipe_reader(tio::TaskChain) = tio.out
 pipe_writer(tio::TaskChain) = tio.in

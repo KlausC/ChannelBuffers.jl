@@ -132,9 +132,9 @@ end
 end
 
 @testset "open task chain for reading" begin
-    data = "hello world!"
+    data = "hello world!" ^ 1000
     io = IOBuffer(data)
-    tio = open(noop(), "r", io)
+    tio = open(noop(), io; read=true)
     yield()
     @test tio isa ChannelBuffers.TaskChain
     @test istaskstarted(tio)
@@ -149,6 +149,29 @@ end
     @test isreadable(cio)
     @test !iswritable(cio)
     @test position(cio) == length(data)
+end
+
+@testset "open BClosure" for pl in ( noop(), gzip() | gunzip())
+    @test_throws ArgumentError open(pl, "r+", stdout)
+    tl = open(pl, "r+")
+    @test tl.in isa ChannelBuffers.ChannelIO
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(Base.pipe_writer(tl))
+    wait(tl)
+    tl = open(pl, "w+")
+    @test tl.in isa ChannelBuffers.ChannelIO
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(tl)
+    tl = open(pl, "r", devnull)
+    @test tl.in === devnull
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(tl)
+    io = IOBuffer()
+    tl = open(pl, "w", io)
+    @test tl.in isa ChannelBuffers.ChannelIO
+    @test tl.out === io
+    close(Base.pipe_writer(tl))
+    @test fetch(tl) === nothing
 end
 
 @testset "open task chain for writing" begin

@@ -2,7 +2,7 @@
 abstract type AbstractChannelIO <: IO end
 
 import Base: open, close, readbytes!, Redirectable
-
+using Infiltrator
 
 const R = :R
 const W = :W
@@ -210,23 +210,23 @@ end
 
 function bytesavailable(cio::ChannelIO)
     isreadable(cio) || throw_inv(cio)
-    n = cio.woffset - cio.roffset
+    n = length(cio.buffer) - cio.roffset
     if n > 0
         return Int(n)
     else
-        cio.eofpending && return 0
-        cio.woffset = 0
+        woffset = 0
         cio.roffset = length(cio.buffer)
     end
     if isready(cio.ch)
-        takebuffer!(cio)
+        woffset = takebuffer!(cio)
     end
-    Int(cio.woffset)
+    Int(woffset)
 end
 
 function eof(cio::ChannelIO)
     isreadable(cio) || throw_inv(cio)
     cio.roffset < length(cio.buffer) && return false
+    #@infiltrate
     takebuffer!(cio)
     return cio.eofpending && cio.roffset >= length(cio.buffer)
 end
@@ -337,7 +337,7 @@ function show(io::IO, cio::ChannelPipe)
     print(io, buffer_length(cio.out), ", ", channel_state(cio), ")")
 end
 
-channel_length(ch::Channel) = sum(length.(ch.data))
+channel_length(ch::Channel) = (sum(length.(ch.data)), length(ch.data))
 channel_length(cio::ChannelIO) = channel_length(cio.ch)
 channel_length(cp::ChannelPipe) = channel_length(cp.in)
 channel_state(ch::Channel) = ch.state
