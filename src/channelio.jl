@@ -13,9 +13,8 @@ const W = :W
 Is read and written like an `IOStream`. If buffers are empty/full transport them using
 channels allowing parallel task pipelining.
 """
-mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: AbstractChannelIO
+mutable struct ChannelIO{RW,T<:AbstractVector{UInt8}} <: AbstractChannelIO
     ch::Channel{T}
-    rw::Symbol # R readonly W writeonly
     buffer::T
     bufsize::Int
     offset::Int
@@ -25,7 +24,7 @@ mutable struct ChannelIO{T<:AbstractVector{UInt8}} <: AbstractChannelIO
     function ChannelIO(ch::Channel, rw::Symbol, buffer::V, bufsize::Integer) where V
         bufsize > 0 || throw(ArgumentError("minimal buffer size is $bufsize"))
         rw == R || rw == W || throw(ArgumentError("read/write must be $R or $W"))
-        new{V}(ch, rw, buffer, bufsize, 0, false, 0, -1)
+        new{rw,V}(ch, buffer, bufsize, 0, false, 0, -1)
     end
 end
 
@@ -33,12 +32,10 @@ const DEFAULT_BUFFER_SIZE = 8192
 const DEFAULT_CHANNEL_LENGTH = 1
 
 struct ChannelPipe{T} <: AbstractPipe
-    in::ChannelIO{T}
-    out::ChannelIO{T}
-    function ChannelPipe(cin::ChannelIO{T}, cout::ChannelIO{T}) where T
+    in::ChannelIO{W,T}
+    out::ChannelIO{R,T}
+    function ChannelPipe(cin::ChannelIO{W,T}, cout::ChannelIO{R,T}) where T
         cin.ch === cout.ch || throw(ArgumentError("cin and cout must share same Channel"))
-        iswritable(cin) || throw(ArgumentError("cin must be writable"))
-        isreadable(cout) || throw(ArgumentError("cout must be readable"))
         new{T}(cin, cout)
     end
 end
@@ -49,13 +46,8 @@ function ChannelPipe(bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelPipe(in, out)
 end
 
-function ChannelPipe(cio::ChannelIO{T}) where T
-    ciow = reverseof(cio)
-    if isreadable(ciow)
-        ciow, cio = cio, ciow
-    end
-    ChannelPipe(ciow, cio)
-end
+ChannelPipe(cio::ChannelIO{R}) = ChannelPipe(reverseof(cio), cio)
+ChannelPipe(cio::ChannelIO{W}) = ChannelPipe(cio, reverseof(cio))
 
 const AllChannelIO = Union{ChannelIO,ChannelPipe}
 
@@ -75,31 +67,34 @@ end
 
 # create ChannelIO with same channel and reverse read/write indicator
 function reverseof(cio::ChannelIO)
-    rev = cio.rw == R ? W : R
+    rev = isreadable(cio) ? W : R
     ChannelIO(cio.ch, rev, cio.bufsize)
 end
 
-function isopen(cio::ChannelIO)
-    isopen(cio.ch) || isready(cio.ch)
+isopen(cio::ChannelIO{R}) = isopen(cio.ch) || isready(cio.ch)
+isopen(cio::ChannelIO{W}) = isopen(cio.ch)
+
+@noinline function throw_invalid(cio::ChannelIO{RW}) where RW
+    rw = RW
+    text = iswritable(cio) && !isopen(cio) ? "closed" : "$(rw)-only"
+    throw(InvalidStateException("$(rw)-channel is $text", rw))
+end
+@noinline function throw_closed(::ChannelIO{RW}) where RW
+    throw(InvalidStateException("channel has been closed.", RW))
+end
+@noinline function throw_wrong_mode(::ChannelIO{RW}) where RW
+    throw(InvalidStateException("channel has wrong mode.", RW))
 end
 
-@noinline function throw_inv(cio::ChannelIO)
-    text = iswritable(cio) && !isopenwritable(cio) ? "closed" : "$(cio.rw)-only"
-    throw(InvalidStateException("$(cio.rw)-channel is $text", cio.rw))
-end
-
-@noinline function throw_closed(cio::ChannelIO)
-    throw(InvalidStateException("channel is closed.", cio.rw))
-end
-
-function vput!(cio::ChannelIO{T}, b::T) where T
+function vput!(cio::ChannelIO{W,T}, b::T) where T
     put!(cio.ch, b)
     isopen(cio.ch) || throw_closed(cio)
     b
 end
 
-function write(cio::ChannelIO, byte::UInt8)
-    isopenwritable(cio) || throw_inv(cio)
+write(cio::ChannelIO{R}, ::UInt8) = throw_wrong_mode(cio)
+function write(cio::ChannelIO{W}, byte::UInt8)
+    isopen(cio) || throw_invalid(cio)
     n = length(cio.buffer)
     cio.offset += 1
     if cio.offset > n
@@ -111,8 +106,9 @@ function write(cio::ChannelIO, byte::UInt8)
     end
 end
 
-function unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    isopenwritable(cio) || throw_inv(cio)
+unsafe_write(cio::ChannelIO{R}, ::Ptr{UInt8}, ::UInt) = throw_wrong_mode(cio)
+function unsafe_write(cio::ChannelIO{W}, pp::Ptr{UInt8}, nn::UInt)
+    isopen(cio) || throw_invalid(cio)
     k = cio.offset
     if length(cio.buffer) < cio.bufsize
         resize!(cio.buffer, cio.bufsize)
@@ -140,12 +136,13 @@ function unsafe_write(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
     Int(nn)
 end
 
-function flush(cio::ChannelIO)
-    isopenwritable(cio) || return nothing
+flush(cio::ChannelIO{R}) = throw_wrong_mode(cio)
+function flush(cio::ChannelIO{W})
+    isopen(cio) || return nothing
     _flush(cio, false)
 end
 
-function _flush(cio::ChannelIO, close::Bool)
+function _flush(cio::ChannelIO{W}, close::Bool)
     cio.offset == 0 && !close && return
     resize!(cio.buffer, cio.offset)
     try
@@ -159,7 +156,7 @@ function _flush(cio::ChannelIO, close::Bool)
     nothing
 end
 
-function _destroy(cio::ChannelIO)
+function _destroy(cio::ChannelIO{R})
     ch = cio.ch
     lock(ch)
     try
@@ -179,11 +176,7 @@ end
 function close(cio::ChannelIO)
     isopen(cio.ch) || return
     try
-        if isreadable(cio)
-            _destroy(cio)
-        else
-            _flush(cio, true)
-        end
+       closefinish(cio)
     catch
         # ignore error during close
     finally
@@ -191,20 +184,23 @@ function close(cio::ChannelIO)
     end
     nothing
 end
+closefinish(cio::ChannelIO{R}) = _destroy(cio)
+closefinish(cio::ChannelIO{W}) = _flush(cio, true)
 
-function peek(cio::ChannelIO)
-    isreadable(cio) || throw_inv(cio)
+peek(cio::ChannelIO{W}) = throw_wrong_mode(cio)
+function peek(cio::ChannelIO{R})
     eof(cio) && throw(EOFError())
     cio.buffer[cio.offset + 1]
 end
-function read(cio::ChannelIO, ::Type{UInt8})
-    isreadable(cio) || throw_inv(cio)
+
+read(cio::ChannelIO{W}, ::Type{UInt8}) = throw_wrong_mode(cio)
+function read(cio::ChannelIO{R}, ::Type{UInt8})
     eof(cio) && throw(EOFError())
     c = cio.buffer[cio.offset += 1]
 end
 
-function bytesavailable(cio::ChannelIO)
-    isreadable(cio) || throw_inv(cio)
+bytesavailable(cio::ChannelIO{W}) = throw_wrong_mode(cio)
+function bytesavailable(cio::ChannelIO{R})
     n = length(cio.buffer) - cio.offset
     if n > 0
         return Int(n)
@@ -218,15 +214,16 @@ function bytesavailable(cio::ChannelIO)
     Int(woffset)
 end
 
-function eof(cio::ChannelIO)
-    isreadable(cio) || throw_inv(cio)
+eof(cio::ChannelIO{W}) = throw_wrong_mode(cio)
+function eof(cio::ChannelIO{R})
     cio.offset < length(cio.buffer) && return false
     #@infiltrate
     takebuffer!(cio)
     return cio.eofpending && cio.offset >= length(cio.buffer)
 end
 
-function readbytes!(cio::ChannelIO, b::Vector{UInt8}, nb=length(b); all::Bool=true)
+readbytes!(cio::ChannelIO{W}, ::Vector{UInt8}, ::Any=0; all::Bool=true) = throw_wrong_mode(cio)
+function readbytes!(cio::ChannelIO{R}, b::Vector{UInt8}, nb=length(b); all::Bool=true)
     s = bytesavailable(cio)
     n = min(s, nb)
     if n > length(b)
@@ -247,8 +244,8 @@ function readbytes!(cio::ChannelIO, b::Vector{UInt8}, nb=length(b); all::Bool=tr
     return Int(r)
 end
 
-function unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
-    isreadable(cio) || throw_inv(cio)
+unsafe_read(cio::ChannelIO{W}, ::Ptr{UInt8}, ::UInt) = throw_wrong_mode(cio)
+function unsafe_read(cio::ChannelIO{R}, pp::Ptr{UInt8}, nn::UInt)
     p = pp
     n = Int(nn)
     while n > 0 && !eof(cio)
@@ -264,13 +261,13 @@ function unsafe_read(cio::ChannelIO, pp::Ptr{UInt8}, nn::UInt)
     Int(nn - n)
 end
 
-function newbuffer!(cio::ChannelIO)
+function newbuffer!(cio::ChannelIO{W})
     #Vector{UInt8}(undef, cio.bufsize)
     cio.buffer = zeros(UInt8, cio.bufsize)
     cio.offset = 0
 end
 
-function takebuffer!(cio::ChannelIO)
+function takebuffer!(cio::ChannelIO{R})
     bufsize = length(cio.buffer)
     if isopen(cio.ch) || isready(cio.ch)
         try
@@ -289,9 +286,9 @@ function takebuffer!(cio::ChannelIO)
     n
 end
 
-isreadable(cio::ChannelIO) = cio.rw == R
+isreadable(::ChannelIO{R}) = true
+isreadable(::ChannelIO{W}) = false
 iswritable(cio::ChannelIO) = !isreadable(cio)
-isopenwritable(cio::ChannelIO) = iswritable(cio) && isopen(cio.ch)
 
 function position(cio::ChannelIO)
     cio.position + cio.offset
@@ -311,15 +308,13 @@ function seek(cio::ChannelIO, p::Integer)
     cio
 end
 
-function show(io::IO, cio::ChannelIO)
-    print(io, "ChannelIO(", cio.rw, ", ")
-    if isreadable(cio)
-        print(io, channel_length(cio), " → ", buffer_length(cio))
-    else
-        print(io, buffer_length(cio), " → ", channel_length(cio))
-    end
+function show(io::IO, cio::ChannelIO{RW}) where RW
+    print(io, "ChannelIO{$RW}(")
+    showbuf(io, cio)
     print(io, ", position ", position(cio), ", ", channel_state(cio), ")")
 end
+showbuf(io, cio::ChannelIO{R}) = print(io, channel_length(cio), " → ", buffer_length(cio))
+showbuf(io, cio::ChannelIO{W}) = print(io, buffer_length(cio), " → ", channel_length(cio))
 
 function show(io::IO, cio::ChannelPipe)
     print(io, "ChannelPipe(", )
@@ -340,9 +335,8 @@ function channel_state(cio::ChannelIO)
 end
 channel_state(cio::ChannelPipe) = channel_state(cio.out)
 
-function buffer_length(cio::ChannelIO)
-    isreadable(cio) ? length(cio.buffer) - cio.offset : cio.offset
-end
+buffer_length(cio::ChannelIO{R}) = length(cio.buffer) - cio.offset
+buffer_length(cio::ChannelIO{W}) = cio.offset
 
 write(io::ChannelPipe, x::UInt8) = write(io.in, x)
 unsafe_write(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_write(io.in, p, n)

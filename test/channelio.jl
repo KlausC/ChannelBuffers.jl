@@ -92,7 +92,7 @@ end
 @testset "write on read-only" begin
     rio = ChannelIO(:R)
     @test_throws InvalidStateException write(rio, "hallo")
-    @test flush(rio) === nothing
+    @test_throws InvalidStateException flush(rio) === nothing
 end
 
 @testset "write to closed channel" begin
