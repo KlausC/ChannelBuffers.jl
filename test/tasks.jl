@@ -4,8 +4,16 @@ using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)
 
-@testset "run individual task" begin
+@testset "BTask{T,Process}" begin
+    pl = ChannelBuffers.BClosureList([`false`])
+    tl = run(pl)
+    @test fetch(tl) == 1
+    @test istaskstarted(tl)
+    @test istaskdone(tl)
+    @test istaskfailed(tl)
+end
 
+@testset "run individual task" begin
     file = tpath("tfile")
     text = "This is a small test data file"
     open(file, "w") do io
@@ -167,11 +175,12 @@ end
     @test tl.out isa ChannelBuffers.ChannelIO
     close(tl)
     io = IOBuffer()
-    tl = open(pl, "w", io)
-    @test tl.in isa ChannelBuffers.ChannelIO
-    @test tl.out === io
-    close(Base.pipe_writer(tl))
-    @test fetch(tl) === nothing
+    open(pl, "w", io) do tl
+        @test tl.in isa ChannelBuffers.ChannelIO
+        @test tl.out === io
+        close(Base.pipe_writer(tl))
+        @test fetch(tl) === nothing
+    end
 end
 
 @testset "open task chain for writing" begin
@@ -201,4 +210,8 @@ end
         close(tio) # do not read to eof
     end
     @test s == data[1:6]
+end
+
+@testset "dont vclose TTY" begin
+    @test ChannelBuffers.vclose(stderr, true) === nothing
 end

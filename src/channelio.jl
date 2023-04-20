@@ -159,12 +159,8 @@ function _flush(cio::ChannelIO, close::Bool)
     nothing
 end
 
-function destroy(cio::ChannelIO)
-    isreadable(cio) || return nothing
-    _destroy(cio)
-end
-
 function _destroy(cio::ChannelIO)
+    ch = cio.ch
     lock(ch)
     try
         while isready(ch)

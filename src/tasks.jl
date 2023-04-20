@@ -160,7 +160,12 @@ function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
         end
     end
     if i >= 1
-        tv[1] = _schedule(btdl.list[1], to_pipe(cin0), cout)
+        s = list[i]
+        if s isa AbstractCmd
+            tv[i] = open(s, write=true, read= i == n)
+        else
+            tv[i] = _schedule(s, to_pipe(cin0), cout)
+        end
     end
     TaskChain(BTask{T}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
 end

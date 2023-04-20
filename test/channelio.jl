@@ -21,7 +21,7 @@ end
 
 # test if called function is blocked on reading from channel at least at `t` seconds
 function testblock(f, rio, t, args...)
-    runcloseabort(rio, t)
+    runabort(rio, t)
     @test_throws InvalidStateException f(args...)
 end
 
@@ -78,13 +78,31 @@ end
     @test flush(wio) === nothing
 end
 
+@testset "close reading channel" begin
+    rio = ChannelIO(:R)
+    buffer = codeunits("abcdef")
+    put!(rio.ch, buffer)
+    close(rio)
+    @test !isopen(rio)
+    @test bytesavailable(rio) == 0
+    @test eof(rio)
+    @test startswith(sprint(show, rio), "ChannelIO")
+end
+
 @testset "write on read-only" begin
     rio = ChannelIO(:R)
     @test_throws InvalidStateException write(rio, "hallo")
     @test flush(rio) === nothing
 end
 
-"""
+@testset "write to closed channel" begin
+    io = ChannelIO(:W, 10)
+    write(io, "abc")
+    close(io)
+    @test_throws InvalidStateException write(io, "de")
+end
+
+#=
 @testset "block writing" begin
     input = "0123456789"^10
     ISZ = sizeof(input)
@@ -94,7 +112,7 @@ end
         write(wio, input)
     end
 end
-"""
+=#
 
 BSZ = 100
 @testset "multiple writes (data size = $ISZ)" for ISZ in [BSZ-1, BSZ+1]

@@ -27,8 +27,9 @@ const DEFAULT_IN = devnull
 const DEFAULT_OUT = devnull
 
 const BClosureAndList = Union{BClosure,BClosureList}
+const BClosureListCmd = Union{BClosureAndList,AbstractCmd}
 
-|(left::BClosureAndList, right::BClosureAndList) = →(left, right)
+|(left::BClosureListCmd, right::BClosureListCmd) = →(left, right)
 
 """
     a → b  (\rightarrow operator)
