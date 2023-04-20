@@ -72,10 +72,19 @@ end
 @testset "read on write-only" begin
     wio = ChannelIO(:W)
     @test_throws InvalidStateException read(wio, UInt8)
+    @test_throws InvalidStateException readbytes!(wio, UInt8[])
     @test_throws InvalidStateException peek(wio)
     @test_throws InvalidStateException eof(wio)
     @test_throws InvalidStateException bytesavailable(wio)
+    @test_throws InvalidStateException unsafe_read(wio, Ptr{UInt8}(0), UInt(0))
     @test flush(wio) === nothing
+end
+
+@testset "write on read-only" begin
+    rio = ChannelIO(:R)
+    @test_throws InvalidStateException write(rio, UInt8(64))
+    @test_throws InvalidStateException write(rio, "hallo")
+    @test_throws InvalidStateException flush(rio) === nothing
 end
 
 @testset "close reading channel" begin
@@ -87,12 +96,6 @@ end
     @test bytesavailable(rio) == 0
     @test eof(rio)
     @test startswith(sprint(show, rio), "ChannelIO")
-end
-
-@testset "write on read-only" begin
-    rio = ChannelIO(:R)
-    @test_throws InvalidStateException write(rio, "hallo")
-    @test_throws InvalidStateException flush(rio) === nothing
 end
 
 @testset "write to closed channel" begin
@@ -205,4 +208,21 @@ end
     close(p.in)
     @test read(p, String) == data[3:4]
     @test close(p) === nothing
+end
+
+nested(ex::TaskFailedException) = current_exceptions(ex.task)[1].exception
+
+@testset "close channel while put! pending" begin
+    io = ChannelIO(:W)
+    pl = Task(() -> ChannelBuffers.vput!(io, zeros(UInt8, 10)))
+    ChannelBuffers.vput!(io, zeros(UInt8, 20))
+    @test isready(io.ch)
+    tl = schedule(pl)
+    sleep(0.01)
+    close(io.ch)
+    try
+        wait(tl)
+    catch ex
+        @test nested(ex) isa InvalidStateException
+    end
 end

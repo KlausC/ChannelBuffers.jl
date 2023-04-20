@@ -212,6 +212,6 @@ end
     @test s == data[1:6]
 end
 
-@testset "dont vclose TTY" begin
+@testset "don't vclose TTY" begin
     @test ChannelBuffers.vclose(stderr, true) === nothing
 end

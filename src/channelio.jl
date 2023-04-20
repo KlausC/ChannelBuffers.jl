@@ -77,10 +77,7 @@ isopen(cio::ChannelIO{W}) = isopen(cio.ch)
 @noinline function throw_invalid(cio::ChannelIO{RW}) where RW
     rw = RW
     text = iswritable(cio) && !isopen(cio) ? "closed" : "$(rw)-only"
-    throw(InvalidStateException("$(rw)-channel is $text", rw))
-end
-@noinline function throw_closed(::ChannelIO{RW}) where RW
-    throw(InvalidStateException("channel has been closed.", RW))
+    throw(InvalidStateException("$(rw)-channel is $text.", rw))
 end
 @noinline function throw_wrong_mode(::ChannelIO{RW}) where RW
     throw(InvalidStateException("channel has wrong mode.", RW))
@@ -88,7 +85,6 @@ end
 
 function vput!(cio::ChannelIO{W,T}, b::T) where T
     put!(cio.ch, b)
-    isopen(cio.ch) || throw_closed(cio)
     b
 end
 
