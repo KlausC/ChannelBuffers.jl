@@ -248,7 +248,7 @@ end
 here(::Union{AbstractString,FileRedirect}) = true
 here(::Any) = false
 vopen(file::AbstractString, write::Bool) = open(file; write)
-vopen(fr::FileRedirect, write::Bool) = open(fr.filename; write, append=fr.append)
+vopen(fr::FileRedirect, write::Bool) = open(fr.filename; write=write, append=fr.append)
 vopen(cio::Any, ::Bool) = cio
 
 vclose(here::Bool, cio, write::Bool) = here ? close(cio) : vclose(cio, write)

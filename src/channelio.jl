@@ -2,7 +2,6 @@
 abstract type AbstractChannelIO <: IO end
 
 import Base: open, close, readbytes!, Redirectable
-using Infiltrator
 
 const R = :R
 const W = :W
@@ -346,20 +345,3 @@ read(io::ChannelPipe, T::Type{UInt8}) = read(io.out, T)
 pipe_reader(io::ChannelPipe) = io.out
 pipe_writer(io::ChannelPipe) = io.in
 close(io::ChannelPipe) = begin close(io.in); close(io.out) end
-
-#= support debugging
-using Infiltrator
-struct IOWrapper{T<:IO} <: IO
-    io::T
-end
-export IOWrapper
-
-eof(io::IOWrapper) = eof(io.io)
-read(io::IOWrapper, args...; kwargs...) = read(io.io, args...; kwargs...)
-write(io::IOWrapper, x::UInt8) = write(io.io, x)
-take!(s::IOWrapper) = take!(s.io)
-function close(s::IOWrapper)
-    @infiltrate
-    close(s.io)
-end
-=#
