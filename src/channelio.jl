@@ -267,8 +267,9 @@ function takebuffer!(cio::ChannelIO{R})
     if isopen(cio.ch) || isready(cio.ch)
         try
             buffer = take!(cio.ch)
-        catch
+        catch ex
             buffer = UInt8[]
+            ex isa InterruptException && rethrow()
         end
     else
         buffer = UInt8[]
@@ -294,14 +295,24 @@ function seek(cio::ChannelIO, p::Integer)
     seek_start = cio.position
     seek_end = cio.position + n
     pp = p - position(cio)
-    if seek_start <= p < seek_end
+    if seek_start <= p <= seek_end
         cio.offset += pp
+    elseif seek_start <= p && isreadable(cio)
+        while (s = isopen(cio))
+            takebuffer!(cio)
+            cio.position <= p <= cio.position + length(cio.buffer) && break
+        end
+        if s
+            cio.offset = p - cio.position
+        end
     else
-        boundaries = "$(seek_start) <= $p < $(seek_end)"
+        boundaries = "$(seek_start) <= $p <= $(isreadable(cio) ? "∞" : seek_end)"
         throw(ArgumentError("cannot seek beyond positions ($boundaries)"))
     end
     cio
 end
+
+skip(cio::ChannelIO, n::Integer) = seek(cio, position(cio) + n)
 
 function show(io::IO, cio::ChannelIO{RW}) where RW
     print(io, "ChannelIO{$RW}(")
