@@ -2,7 +2,7 @@ name = "ChannelBuffers"
 uuid = "79a69506-cdd1-4876-b8e5-7af85e53af4f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 authors = ["Klaus Crusius <klaus.crusius@web.de>"]
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"

@@ -4,8 +4,16 @@ using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)
 
+@testset "BTask{T,Process}" begin
+    pl = ChannelBuffers.BClosureList([`false`])
+    tl = run(pl)
+    @test fetch(tl) == 1
+    @test istaskstarted(tl)
+    @test istaskdone(tl)
+    @test istaskfailed(tl)
+end
+
 @testset "run individual task" begin
-    
     file = tpath("tfile")
     text = "This is a small test data file"
     open(file, "w") do io
@@ -30,9 +38,9 @@ end
     tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl))
-    @test all(istaskdone.(tl))
-    @test !any(istaskfailed.(tl))
+    @test istaskstarted(tl)
+    @test istaskdone(tl)
+    @test !istaskfailed(tl)
     @test sprint(show, tl) !== nothing
 end
 
@@ -43,23 +51,9 @@ end
     close(tar.cout)
     @test length(tl) == 2
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl))
-    @test !any(istaskfailed.(tl))
+    @test istaskstarted(tl)
+    @test !istaskfailed(tl)
 end
-
-#=
-just in case we allow Channel
-@testset "redirect to Channel" begin
-    fin = tpath("xxx0.tgz")
-    fout = Channel(100)
-    pl = pipeline(source(fin), fout)
-    tl = run(pl)
-    while isready(fout)
-        take!(fout)
-    end
-    @test wait(tl) === nothing
-end
-=#
 
 @testset "tar -x $dir" for (decoder, dir) in [(gunzip(), "xxx"), (transcoder(GzipDecompressor()), "xxx2")]
     file = tpath("xxx1.tgz")
@@ -70,8 +64,8 @@ end
     tl = run(tar)
     @test length(tl) == 3
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl))
-    @test !any(istaskfailed.(tl))
+    @test istaskstarted(tl)
+    @test !istaskfailed(tl)
 
     dc = `diff -r "$DDIR/xxx" "$TDIR/$dir"` # check if contents of both dirs are equal
     @test run(dc) !== nothing
@@ -83,8 +77,8 @@ end
     @test length(tl) == 2
     @test tl[2] isa BTask
     @test wait(tl) === nothing
-    @test all(istaskstarted.(tl))
-    @test !any(istaskfailed.(tl))
+    @test istaskstarted(tl)
+    @test !istaskfailed(tl)
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx2.tgz"` # check if contents of both dirs are equal
     @test run(fc) !== nothing
     bt = tl[2]
@@ -143,4 +137,81 @@ end
     write(pi, text)
     close(Base.pipe_writer(pi))
     @test read(po, String) == text
+end
+
+@testset "open task chain for reading" begin
+    data = "hello world!" ^ 1000
+    io = IOBuffer(data)
+    tio = open(noop(), io; read=true)
+    yield()
+    @test tio isa ChannelBuffers.TaskChain
+    @test istaskstarted(tio)
+    @test !istaskdone(tio)
+    @test read(tio, String) == data
+    wait(tio)
+    @test istaskstarted(tio)
+    @test istaskdone(tio)
+    @test !istaskfailed(tio)
+
+    cio = Base.pipe_reader(tio)
+    @test isreadable(cio)
+    @test !iswritable(cio)
+    @test position(cio) == length(data)
+end
+
+@testset "open BClosure" for pl in ( noop(), gzip() | gunzip())
+    @test_throws ArgumentError open(pl, "r+", stdout)
+    tl = open(pl, "r+")
+    @test tl.in isa ChannelBuffers.ChannelIO
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(Base.pipe_writer(tl))
+    wait(tl)
+    tl = open(pl, "w+")
+    @test tl.in isa ChannelBuffers.ChannelIO
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(tl)
+    tl = open(pl, "r", devnull)
+    @test tl.in === devnull
+    @test tl.out isa ChannelBuffers.ChannelIO
+    close(tl)
+    io = IOBuffer()
+    open(pl, "w", io) do tl
+        @test tl.in isa ChannelBuffers.ChannelIO
+        @test tl.out === io
+        close(Base.pipe_writer(tl))
+        @test fetch(tl) === nothing
+    end
+end
+
+@testset "open task chain for writing" begin
+    io = IOBuffer()
+    save_tio = nothing
+    open(gzip() | noop() | gunzip(), io, write=true) do tio
+        for i = 1:5
+            println(tio, repeat("abc ", 10))
+        end
+        @test !istaskdone(tio)
+        save_tio = tio
+    end
+    @test istaskdone(save_tio)
+    res = String(take!(io))
+    @test res == repeat(repeat("abc ", 10) * "\n", 5)
+end
+
+@testset "open TaskChain read incomplete" begin
+    data = """
+    Line 1
+    Line 2
+    """
+    fin = IOBuffer(data)
+    s = ""
+    open(gzip() | gunzip(), fin) do tio
+        s = readline(tio)
+        close(tio) # do not read to eof
+    end
+    @test s == data[1:6]
+end
+
+@testset "don't vclose TTY" begin
+    @test ChannelBuffers.vclose(stderr, true) === nothing
 end

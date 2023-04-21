@@ -21,7 +21,7 @@ end
 
 # test if called function is blocked on reading from channel at least at `t` seconds
 function testblock(f, rio, t, args...)
-    runcloseabort(rio, t)
+    runabort(rio, t)
     @test_throws InvalidStateException f(args...)
 end
 
@@ -72,19 +72,40 @@ end
 @testset "read on write-only" begin
     wio = ChannelIO(:W)
     @test_throws InvalidStateException read(wio, UInt8)
+    @test_throws InvalidStateException readbytes!(wio, UInt8[])
     @test_throws InvalidStateException peek(wio)
     @test_throws InvalidStateException eof(wio)
     @test_throws InvalidStateException bytesavailable(wio)
+    @test_throws InvalidStateException unsafe_read(wio, Ptr{UInt8}(0), UInt(0))
     @test flush(wio) === nothing
 end
 
 @testset "write on read-only" begin
     rio = ChannelIO(:R)
+    @test_throws InvalidStateException write(rio, UInt8(64))
     @test_throws InvalidStateException write(rio, "hallo")
-    @test flush(rio) === nothing
+    @test_throws InvalidStateException flush(rio) === nothing
 end
 
-"""
+@testset "close reading channel" begin
+    rio = ChannelIO(:R)
+    buffer = codeunits("abcdef")
+    put!(rio.ch, buffer)
+    close(rio)
+    @test !isopen(rio)
+    @test bytesavailable(rio) == 0
+    @test eof(rio)
+    @test startswith(sprint(show, rio), "ChannelIO")
+end
+
+@testset "write to closed channel" begin
+    io = ChannelIO(:W, 10)
+    write(io, "abc")
+    close(io)
+    @test_throws InvalidStateException write(io, "de")
+end
+
+#=
 @testset "block writing" begin
     input = "0123456789"^10
     ISZ = sizeof(input)
@@ -94,7 +115,7 @@ end
         write(wio, input)
     end
 end
-"""
+=#
 
 BSZ = 100
 @testset "multiple writes (data size = $ISZ)" for ISZ in [BSZ-1, BSZ+1]
@@ -121,7 +142,7 @@ end
         @test peek(cin) == i
         @test read(cin, UInt8) == i
     end
-    @test_throws EOFError peek(cin) 
+    @test_throws EOFError peek(cin)
     wait(t)
 end
 
@@ -153,12 +174,15 @@ end
     @test !iswritable(p.out)
     write(p, "test data")
     flush(p)
-    @test eof(p) === false
+    @test !eof(p)
     @test read(p, 9) |> length == 9
     write(p, 123)
     close(p.in)
     b = zeros(UInt8, 100)
-    @test readbytes!(p, b, 8) == 8
+    @test readbytes!(p, b, 5) == 5
+    @test !eof(p) # after close - not all bytes read
+    read(p, String)
+    @test eof(p) # all bytes read now
 end
 
 @testset "show Channel objects" begin
@@ -178,10 +202,27 @@ end
     @test position(p.in) == 4
     flush(p)
     @test position(p.in) == 4
-    @test_throws Exception seek(p.in, 5)
+    @test_throws Exception seek(p.in, 3)
     @test peek(p, Char) == read(p, Char)
     @test_throws Exception seek(p.out, 5)
     close(p.in)
     @test read(p, String) == data[3:4]
     @test close(p) === nothing
+end
+
+nested(ex::TaskFailedException) = current_exceptions(ex.task)[1].exception
+
+@testset "close channel while put! pending" begin
+    io = ChannelIO(:W)
+    pl = Task(() -> ChannelBuffers.vput!(io, zeros(UInt8, 10)))
+    ChannelBuffers.vput!(io, zeros(UInt8, 20))
+    @test isready(io.ch)
+    tl = schedule(pl)
+    sleep(0.01)
+    close(io.ch)
+    try
+        wait(tl)
+    catch ex
+        @test nested(ex) isa InvalidStateException
+    end
 end

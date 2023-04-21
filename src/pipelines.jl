@@ -4,21 +4,12 @@
 Store function and arguments. The signature of the function must
 be like `f(cin::IO, cout::IO, args...)`.
 """
-struct BClosure{F<:Function,Args<:Tuple}
+struct BClosure{F<:Function,Args<:Tuple} # <: AbstractCmd resolve ambis first!
     f::F
     args::Args
 end
 
-import Base: |, AbstractCmd, pipeline
-
-# used for output redirection
-const UIO = Union{IO,AbstractString}
-const AllIO = Union{UIO,AllChannelIO}
-const DEFAULT_IN = devnull
-const DEFAULT_OUT = devnull
-
 const ClosureCmd = Union{BClosure,AbstractCmd}
-
 # List of BClosure objects and io redirections
 struct BClosureList{In,Out}
     list::Vector{ClosureCmd}
@@ -29,8 +20,17 @@ struct BClosureList{In,Out}
     end
 end
 BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
+# used for output redirection
+const UIO = Union{IO,AbstractString}
+const AllIO = Union{UIO,AllChannelIO}
+const DEFAULT_IN = devnull
+const DEFAULT_OUT = devnull
 
-|(left::Union{BClosure,BClosureList}, right::Union{BClosure,BClosureList}) = →(left, right)
+const BClosureAndList = Union{BClosure,BClosureList}
+const BClosureListCmd = Union{BClosureAndList,AbstractCmd}
+
+|(left::BClosureListCmd, right::BClosureListCmd) = →(left, right)
+
 """
     a → b  (\rightarrow operator)
 
@@ -45,9 +45,9 @@ listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, 
 listcombine(v::Vector, cmd::ClosureCmd) = isempty(v) ? [cmd] : listcombine(v, last(v), cmd)
 listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
 listcombine(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
-listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right) 
+listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right)
 listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], listcombine(last(list), right))
-listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list) 
+listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list)
 listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(listcombine(left, first(list)), list[2:end])
 
 function listcombine(left::Vector, right::Vector)
@@ -76,7 +76,7 @@ function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
     if stdin === nothing && stdout === nothing
         cmd
     else
-        out = append && stdout isa AbstractString ? Base.FileRedirect(stdout, append) : stdout
+        out = append && stdout isa AbstractString ? FileRedirect(stdout, append) : stdout
         BClosureList([cmd], something(stdin,DEFAULT_IN), something(out, DEFAULT_OUT))
     end
 end

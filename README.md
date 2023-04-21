@@ -49,8 +49,8 @@ or
 ## Predefined closures
 
 ``` julia
-    tarc(dir) # read files in input directory and write to output stream
-    tarx(dir) # read input stream and create files in target directory
+    tarc(dir) # take files in input directory and create tar to output stream
+    tarx(dir) # read input stream and extract files to empty target directory
     gzip() # read input stream and write compressed data to output stream
     gunzip() # reverse of gzip
     transcoder(::Codec) # generalization for other kinds of TranscoderStreams
@@ -78,12 +78,12 @@ The following `Base` functions are redefined.
 which are used as in
 
 ``` julia
-    tl = run(fc::BClosure) # ::BTaskList
+    tl = run(fc::BClosure) # ::TaskChain
 
     pl = in → fc → gc → hc → out
     pl = pipeline(fc, gc, hc, stdin=in stdout=out) # ::BClosureList
 
-    tl = run(pl::BClosureList) # ::BTaskList
+    tl = run(pl::BClosureList) # ::TaskChain
 ```
 
 The assignments to `pl` are equivalent.
@@ -92,13 +92,13 @@ The pipelined tasks are considered finished, when the statically last task in th
 The calling task can wait for this event with
 
 ``` julia
-    wait(tl::BTaskList) # ::Nothing
+    wait(tl::TaskChain) # ::Nothing
 ```
 
 If the last task in the pipeline calculates a value, if can be waited for and obtained by
 
 ``` julia
-    fetch(tl::BTaskList) # ::Any
+    fetch(tl::TaskChain) # ::Any
 ```
 
 Both `wait` and `fetch` throw `TaskFailedException` if the last task in the list failed.
@@ -110,10 +110,10 @@ The tasks are spawned on different threads, if multithreading is available (`JUL
 Communication endpoints of the pipeline can be arbitrary `IO` objects or `AbstractString`s denoting file names.
 The files given as strings are appropriately opened and closed.
 
-Element type of `BTaskList` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
+Element type of `TaskChain` is `BTask`, a tagging wrapper around `Task`. It delegates the most important
 methods, like `wait`, `fetch`, `istask...`.
 
-The full functionality of `Base.pipelines` is extended with the integration of `Base.Cmd` and `BClosure`.
+The full functionality of `Base.pipeline` is extended with the integration of `Base.Cmd` and `BClosure`.
 
 [gha-img]: https://github.com/KlausC/ChannelBuffers.jl/workflows/CI/badge.svg
 [gha-url]: https://github.com/KlausC/ChannelBuffers.jl/actions?query=workflow%3ACI

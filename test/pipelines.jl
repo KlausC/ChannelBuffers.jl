@@ -33,11 +33,13 @@ end
 end
 @testset "pipeline(1,2,3)" begin
     @test pipeline(bcl, bcl, bcl) isa BClosureList
-    @test pipeline(bcl, cmd, bcl) isa BClosureList
-    @test pipeline(cmd, bcl, cmd) isa BClosureList
     @test pipeline(bcl, bcl, cmd) isa BClosureList
+    @test pipeline(bcl, cmd, bcl) isa BClosureList
     @test pipeline(bcl, cmd, cmd) isa BClosureList
-    @test pipeline(bcl, bcl, bcl) isa BClosureList
+    @test pipeline(cmd, bcl, bcl) isa BClosureList
+    @test pipeline(cmd, bcl, cmd) isa BClosureList
+    @test pipeline(cmd, cmd, bcl) isa BClosureList
+    @test pipeline(cmd, cmd, cmd) isa Base.OrCmds
 end
 
 @testset "pipeline with ChannelIO" for p in (ChannelIO(), ChannelPipe())
