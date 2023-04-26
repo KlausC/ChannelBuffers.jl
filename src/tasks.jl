@@ -20,11 +20,6 @@ function istaskfailed(bt::BTask{T,<:Process}) where T
     process_exited(bt.task) && bt.task.exitcode != 0
 end
 
-function Base.kill(bc::BTask, ex::Exception=ErrorException("Task $bc was killed"))
-    schedule(bc.task, ex, error=true)
-    yield()
-end
-
 # List of tasks and io redirections - output of `run` and `open`
 """
     TaskChain
@@ -65,6 +60,11 @@ function fetch(tv::TaskChain, ix::Integer=0)
     0 < n || throw(ArgumentError("cannot fetch from empty task list"))
     0 < i <= n || throw(BoundsError(tv, i))
     @inbounds fetch(tv[i])
+end
+
+function Base.kill(bc::BTask, ex::Exception=ErrorException("Task $bc was killed"))
+    schedule(bc.task, ex, error=true)
+    yield()
 end
 
 function Base.kill(tl::TaskChain)

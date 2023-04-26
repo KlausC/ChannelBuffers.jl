@@ -1,9 +1,6 @@
 
 using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 
-dpath(x...) = joinpath(DDIR, x...)
-tpath(x...) = joinpath(TDIR, x...)
-
 @testset "BTask{T,Process}" begin
     pl = ChannelBuffers.BClosureList([`false`])
     tl = run(pl, wait=false)
@@ -202,19 +199,28 @@ end
 end
 
 @testset "open TaskChain read incomplete" begin
-    data = """
-    Line 1
-    Line 2
-    """
-    fin = IOBuffer(data)
+    dir = dpath("xxx")
     s = ""
-    open(gzip() | gunzip(), fin) do tio
+    open(tarc(dir) | tarxO()) do tio
+        readline(tio)
         s = readline(tio)
         close(tio) # do not read to eof
     end
-    @test s == data[1:6]
+    @test s == "sreffuBlennahC eludom"
 end
 
 @testset "don't vclose TTY" begin
     @test ChannelBuffers.vclose(stderr, true) === nothing
+end
+
+@testset "kill TaskChain" begin
+    cin = ChannelPipe()
+    cout = ChannelPipe()
+    tl = run( cin → gzip() | gunzip() → cout, wait=false)
+    write(tl, "hallo")
+    @test istaskstarted(tl) && !istaskdone(tl)
+    kill(tl)
+    @test_throws TaskFailedException wait(tl)
+    @test istaskdone(tl)
+    @test istaskfailed(tl)
 end

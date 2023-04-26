@@ -217,6 +217,14 @@ end
     @test close(p) === nothing
 end
 
+@testset "skip to future" begin
+    p = ChannelPipe(10)
+    schedule(Task(()->begin write(p, 'a':'z'); flush(p); end))
+    skip(p.out, 22)
+    close(p.in)
+    @test read(p, 2) == codeunits("wx")
+end
+
 nested(ex::TaskFailedException) = current_exceptions(ex.task)[1].exception
 
 @testset "close channel while put! pending" begin

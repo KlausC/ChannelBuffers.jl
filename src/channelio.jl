@@ -276,7 +276,7 @@ function takebuffer!(cio::ChannelIO{R})
             buffer = take!(cio.ch)
         catch ex
             buffer = UInt8[]
-            ex isa InterruptException && rethrow()
+            ex isa InvalidStateException || rethrow()
         end
     else
         buffer = UInt8[]
