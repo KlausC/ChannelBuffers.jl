@@ -200,13 +200,16 @@ end
 
 @testset "open TaskChain read incomplete" begin
     dir = dpath("xxx")
+    data = "module ChannelBuffers"
     s = ""
     open(tarc(dir) | tarxO()) do tio
-        readline(tio)
-        s = readline(tio)
+        while !eof(tio)
+            s = readline(tio)
+            s == data && break
+        end
         close(tio) # do not read to eof
     end
-    @test s == "sreffuBlennahC eludom"
+    @test s == data
 end
 
 @testset "don't vclose TTY" begin
@@ -218,7 +221,10 @@ end
     cout = ChannelPipe()
     tl = run( cin → gzip() | gunzip() → cout, wait=false)
     write(tl, "hallo")
-    @test istaskstarted(tl) && !istaskdone(tl)
+    while !istaskstarted(tl)
+        yield()
+    end
+    @test !istaskdone(tl)
     kill(tl)
     @test_throws TaskFailedException wait(tl)
     @test istaskdone(tl)

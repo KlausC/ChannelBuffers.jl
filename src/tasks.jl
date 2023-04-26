@@ -80,19 +80,6 @@ function Base.kill(tl::TaskChain)
     nothing
 end
 
-"""
-    close(::TaskChain)
-
-First close pipe_writer (the device the pipe is reading from).
-That should flush all pending data, giving an EOF to the fist task which should exit.
-Then wait for the last task to be done.
-The pipe_reader would be closed automatically before the completion of the last task.
-"""
-function close(tv::TaskChain)
-    close(pipe_writer(tv))
-    close(pipe_reader(tv))
-end
-
 function show(io::IO, m::MIME"text/plain", tv::TaskChain)
     for t in tv.processes
         show(io, m, t)
