@@ -45,12 +45,32 @@ or
         run(cin → deserializer()) |> fetch
     end
 ```
+It is possible to open a pipe chain for read or write like for process pipes.
+And the can be run:
+
+```julia
+    tl = open("xxx.tar" → tarxO())
+    readln(tl)
+    close(tl)
+
+    # or equivalently
+    open("xxx.tar" → tarxO()) do tl
+        readln(tl)
+    end
+
+    open(gzip() → "data.gz", "w") do tl
+        write(tl, data)
+    end
+
+    run(tarc(dir) → "dir.tar")
+```
 
 ## Predefined closures
 
 ``` julia
     tarc(dir) # take files in input directory and create tar to output stream
     tarx(dir) # read input stream and extract files to empty target directory
+    tarxO() # read input stream and concatenate all file contents to output stream
     gzip() # read input stream and write compressed data to output stream
     gunzip() # reverse of gzip
     transcoder(::Codec) # generalization for other kinds of TranscoderStreams
