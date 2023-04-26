@@ -20,6 +20,11 @@ function istaskfailed(bt::BTask{T,<:Process}) where T
     process_exited(bt.task) && bt.task.exitcode != 0
 end
 
+function Base.kill(bc::BTask, ex::Exception=ErrorException("Task $bc was killed"))
+    schedule(bc.task, ex, error=true)
+    yield()
+end
+
 # List of tasks and io redirections - output of `run` and `open`
 """
     TaskChain
@@ -29,7 +34,7 @@ reading and writing. Created by a call to `[open|run](::BClosureList)`.
 
 An analogue of `ProcessChain`.
 """
-struct TaskChain{T<:Vector{<:BTask},IN,OUT} <: AbstractPipe
+struct TaskChain{T<:AbstractVector{<:BTask},IN<:IO,OUT<:IO} <: AbstractPipe
     processes::T
     in::IN
     out::OUT
@@ -41,11 +46,11 @@ end
 Wait for the last task in the list to finish.
 """
 function wait(tv::TaskChain, ix::Integer=0)
-    n = length(tv.processes)
+    n = length(tv)
     i = ix == 0 ? n : Int(ix)
     0 < n || return nothing
-    0 < i <= n || throw(BoundsError(tv.processes, i))
-    @inbounds wait(tv.processes[i])
+    0 < i <= n || throw(BoundsError(tv, i))
+    @inbounds wait(tv[i])
 end
 
 """
@@ -58,8 +63,21 @@ function fetch(tv::TaskChain, ix::Integer=0)
     n = length(tv)
     i = ix == 0 ? n : Int(ix)
     0 < n || throw(ArgumentError("cannot fetch from empty task list"))
-    0 < i <= n || throw(BoundsError(tv.processes, i))
-    @inbounds fetch(tv.processes[i])
+    0 < i <= n || throw(BoundsError(tv, i))
+    @inbounds fetch(tv[i])
+end
+
+function Base.kill(tl::TaskChain)
+    x = 1
+    while (x = findnext(!istaskdone, tl.processes, x)) !== nothing
+        try
+            kill(tl[x])
+            break
+        catch
+            nothing
+        end
+    end
+    nothing
 end
 
 """
@@ -72,7 +90,7 @@ The pipe_reader would be closed automatically before the completion of the last 
 """
 function close(tv::TaskChain)
     close(pipe_writer(tv))
-    wait(tv)
+    close(pipe_reader(tv))
 end
 
 function show(io::IO, m::MIME"text/plain", tv::TaskChain)
@@ -111,26 +129,27 @@ task_args(t::BTask) = task_code(t).btd.args
 to_pipe(cio::ChannelIO) = ChannelPipe(cio)
 to_pipe(cio) = cio
 pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
-pipe_reader2(cio) = cio
+pipe_reader2(cio::IO) = cio
+pipe_reader2(cio) = DEFAULT_OUT
 pipe_writer2(cio::AbstractPipe) = pipe_writer2(pipe_writer(cio))
-pipe_writer2(cio) = cio
+pipe_writer2(cio::IO) = cio
+pipe_writer2(cio) = DEFAULT_IN
 
 """
-    run(BClosure; stdin=devnull, stdout=devnull)
+    run(BClosure; stdin=devnull, stdout=devnull, wait=true)
 
 Start parallel task redirecting stdin and stdout
 """
-function run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
-    run(BClosureList([bt], stdin, stdout))
+function run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+    run(BClosureList([bt]); stdin, stdout, wait)
 end
 
 """
-    run(::BClosureList)
+    run(::BClosureList; stdin=devnull, stdout=devnull, wait=true)
 
 Start all parallel tasks defined in list, io redirection defaults are defined in the list
 """
-function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
-    T = use_tasks() ? :Task : :Threat
+function _run(btdl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     list = btdl.list
     n = length(list)
     tv = Vector{Union{Task,AbstractPipe}}(undef, n)
@@ -167,7 +186,16 @@ function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
             tv[i] = _schedule(s, to_pipe(cin0), cout)
         end
     end
-    TaskChain(BTask{T}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
+    return tv, cin0, cout0
+end
+
+function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+    tv, cin0, cout0 = _run(btdl, stdin, stdout)
+    tl = TaskChain(BTask{task_thread()}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
+    if wait
+        Base.wait(tl)
+    end
+    tl
 end
 
 function readwrite_from_mode(mode::AbstractString)
@@ -186,12 +214,16 @@ function open(f::Function, bt::BClosureAndList, mode::AbstractString, stdio::Red
 end
 
 function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
+
     if read && write && stdio != devnull
         throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
     end
-    cout = read ? ChannelIO() : stdio
-    cin = write ? ChannelIO(W) : stdio
-    run(pipeline(cin, cmds.list..., cout))
+    cout = read ? ChannelIO(R) : stdio == devnull ? cmds.cout : stdio
+    cin = write ? ChannelIO(W) : stdio == devnull ? cmds.cin : stdio
+    tv, cin0, cout0 = _run(pipeline(cin, cmds.list..., cout))
+    cin0 = write ? cin0 : devnull
+    cout0 = read ? cout0 : devnull
+    TaskChain(BTask{task_thread()}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
 end
 
 function open(bt::BClosure, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
@@ -213,9 +245,8 @@ function closure(f::Function, args...)
     BClosure(f, args)
 end
 
-function use_tasks()
-    Threads.nthreads() <= 1 || Threads.threadid() != 1
-end
+use_tasks() = Threads.nthreads() <= 1 || Threads.threadid() != 1
+task_thread() = use_tasks() ? :Task : :Threat
 
 # schedule single task
 function _schedule(btd::BClosure, cin, cout)
@@ -223,8 +254,7 @@ function _schedule(btd::BClosure, cin, cout)
         ci = vopen(cin, false)
         co = vopen(cout, true)
         try
-            res = btd.f(ci, co, btd.args...)
-            res
+            btd.f(ci, co, btd.args...)
         catch
             #= print stack trace to stderr
             for (exc, bt) in current_exceptions()

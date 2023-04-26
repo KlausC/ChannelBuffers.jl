@@ -137,16 +137,24 @@ function flush(cio::ChannelIO{W})
     _flush(cio, false)
 end
 
-function _flush(cio::ChannelIO{W}, close::Bool)
-    cio.offset == 0 && !close && return
+function _flush(cio::ChannelIO{W}, doclose::Bool)
+    cio.offset == 0 && !doclose && return
+    ch = cio.ch
     resize!(cio.buffer, cio.offset)
+    lock(ch)
     try
-        vput!(cio, cio.buffer)
+        if !isready(ch) || !doclose
+            vput!(cio, cio.buffer)
+        else
+            append!(fetch(ch), cio.buffer)
+        end
     catch
-        !close && rethrow()
+        !doclose && rethrow()
     finally
         cio.position += cio.offset
+        doclose && close(ch)
         newbuffer!(cio)
+        unlock(ch)
     end
     nothing
 end
@@ -163,6 +171,7 @@ function _destroy(cio::ChannelIO{R})
     finally
         cio.eofpending = true
         close(ch)
+        resize!(cio.buffer, cio.offset)
         unlock(ch)
     end
     nothing
@@ -174,8 +183,6 @@ function close(cio::ChannelIO)
        closefinish(cio)
     catch
         # ignore error during close
-    finally
-        close(cio.ch)
     end
     nothing
 end
