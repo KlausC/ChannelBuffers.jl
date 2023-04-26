@@ -70,12 +70,8 @@ end
 function Base.kill(tl::TaskChain)
     x = 1
     while (x = findnext(!istaskdone, tl.processes, x)) !== nothing
-        try
-            kill(tl[x])
-            break
-        catch
-            nothing
-        end
+        kill(tl[x])
+        break
     end
     nothing
 end
