@@ -229,4 +229,15 @@ end
     @test_throws TaskFailedException wait(tl)
     @test istaskdone(tl)
     @test istaskfailed(tl)
+
+    tl = run(`sleep 10` | noop(), wait=false)
+    while !istaskstarted(tl)
+        yield()
+    end
+    @test istaskstarted(tl[1])
+    @test !istaskdone(tl)
+    kill(tl)
+    wait(tl)
+    @test istaskdone(tl)
+    @test kill(tl) === nothing
 end

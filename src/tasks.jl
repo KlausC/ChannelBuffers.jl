@@ -62,17 +62,18 @@ function fetch(tv::TaskChain, ix::Integer=0)
     @inbounds fetch(tv[i])
 end
 
-function Base.kill(bc::BTask, ex::Exception=ErrorException("Task $bc was killed"))
+function Base.kill(bc::BTask{T,<:Process}, signum=Base.SIGTERM) where T
+    kill(bc.task, signum)
+end
+function Base.kill(bc::BTask{T,<:Task}, signum=Base.SIGTERM) where T
+    ex = ErrorException("Task $bc was killed($signum)")
     schedule(bc.task, ex, error=true)
     yield()
 end
 
 function Base.kill(tl::TaskChain)
-    x = 1
-    while (x = findnext(!istaskdone, tl.processes, x)) !== nothing
-        kill(tl[x])
-        break
-    end
+    x = findfirst(t->istaskstarted(t) && !istaskdone(t), tl.processes)
+    x !== nothing && kill(tl[x])
     nothing
 end
 
