@@ -6,7 +6,7 @@ using Serialization
 export source, destination
 export curl
 export transcoder, gunzip, gzip
-export tarc, tarx
+export tarc, tarx, tarxO
 export serializer, deserializer
 
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
@@ -106,3 +106,20 @@ function deserializer()
     _deserializer(cin::IO, ::IO) = Serialization.deserialize(cin)
     closure(_deserializer)
 end
+
+const TARHDR = 512
+function _tarxO(in::IO, out::IO)
+    sz = 0
+    while !eof(in)
+        b = read(in, TARHDR)
+        if sz <= 0
+            sz = parse(Int, String(b[125:135]), base=8)
+            String(b[258:263]) != "ustar\0" && throw(Error("no tar file"))
+        else
+            rest = min(TARHDR, sz)
+            write(out, b[1:rest])
+            sz -= rest
+        end
+    end
+end
+tarxO() = closure(_tarxO)

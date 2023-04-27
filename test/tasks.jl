@@ -1,12 +1,9 @@
 
 using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
 
-dpath(x...) = joinpath(DDIR, x...)
-tpath(x...) = joinpath(TDIR, x...)
-
 @testset "BTask{T,Process}" begin
     pl = ChannelBuffers.BClosureList([`false`])
-    tl = run(pl)
+    tl = run(pl, wait=false)
     @test fetch(tl) == 1
     @test istaskstarted(tl)
     @test istaskdone(tl)
@@ -20,7 +17,7 @@ end
         write(io, text)
     end
     io = IOContext(IOBuffer())
-    run(source(file), stdout = io) |> wait
+    run(source(file), stdout = io)
     @test String(take!(io.io)) == text
 end
 
@@ -28,7 +25,7 @@ end
     obj = ["hans", 92]
     tl = run(serializer(obj) | deserializer())
     @test fetch(tl) == obj
-    tl = run(serializer(obj) | gzip() | deserializer())
+    tl = run(serializer(obj) | gzip() | deserializer(); wait = false)
     @test_throws TaskFailedException fetch(tl)
 end
 
@@ -73,14 +70,14 @@ end
 
 @testset "copy file" begin
     cpy = source(tpath("xxx.tgz")) | destination(tpath("xxx2.tgz")) → stdout
-    tl = run(cpy)
+    tl = run(cpy, wait=false)
     @test length(tl) == 2
     @test tl[2] isa BTask
     @test wait(tl) === nothing
     @test istaskstarted(tl)
     @test !istaskfailed(tl)
     fc = `diff -r "$TDIR/xxx.tgz" "$TDIR/xxx2.tgz"` # check if contents of both dirs are equal
-    @test run(fc) !== nothing
+    @test run(fc, wait=false) !== nothing
     bt = tl[2]
     @test task_cin(bt) isa IO
     @test task_cout(bt) isa IO
@@ -90,7 +87,7 @@ end
 
 @testset "downloads and output redirection" begin
     open(tpath("xxx3.tgz"), "w") do io
-        wait(run(curl("file://" * TDIR * "/xxx.tgz") → io))
+        run(curl("file://" * TDIR * "/xxx.tgz") → io)
     end
     fc = `diff "$TDIR/xxx.tgz" "$TDIR/xxx3.tgz"`
     @test run(fc) !== nothing
@@ -98,7 +95,7 @@ end
 
 @testset "destination and input redirection" begin
     open(tpath("xxx.tgz"), "r") do io
-        (io → destination(tpath("xxx4.tgz"))) |> run |> wait
+        (io → destination(tpath("xxx4.tgz"))) |> run
     end
     fc = `diff "$TDIR/xxx.tgz" "$TDIR/xxx4.tgz"`
     @test run(fc) !== nothing
@@ -115,7 +112,7 @@ end
 @testset "mixed pipline run" begin
     fout = tpath("xxx.txt")
     pl = pipeline(`ls ../src`, ChannelBuffers.noop(), `cat -`, fout)
-    tl = run(pl)
+    tl = run(pl, wait = false)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
 end
@@ -124,7 +121,7 @@ end
     fin = tpath("xxx4.tgz")
     fout = tpath("xxa")
     pl = pipeline(source(fin), stdout=fout, append=true)
-    tl = run(pl)
+    tl = run(pl, wait=false)
     @test wait(tl) === nothing
 end
 
@@ -132,7 +129,7 @@ end
     pi = ChannelPipe()
     po = ChannelPipe()
     pl = pi → NOOP → po
-    tl = run(pl)
+    tl = run(pl, wait=false)
     text = "hallo"
     write(pi, text)
     close(Base.pipe_writer(pi))
@@ -140,7 +137,7 @@ end
 end
 
 @testset "open task chain for reading" begin
-    data = "hello world!" ^ 1000
+    data = "hello world!" ^ 10000
     io = IOBuffer(data)
     tio = open(noop(), io; read=true)
     yield()
@@ -170,14 +167,16 @@ end
     @test tl.in isa ChannelBuffers.ChannelIO
     @test tl.out isa ChannelBuffers.ChannelIO
     close(tl)
+    wait(tl)
     tl = open(pl, "r", devnull)
     @test tl.in === devnull
     @test tl.out isa ChannelBuffers.ChannelIO
     close(tl)
+    wait(tl)
     io = IOBuffer()
     open(pl, "w", io) do tl
         @test tl.in isa ChannelBuffers.ChannelIO
-        @test tl.out === io
+        @test tl.out === devnull
         close(Base.pipe_writer(tl))
         @test fetch(tl) === nothing
     end
@@ -193,25 +192,52 @@ end
         @test !istaskdone(tio)
         save_tio = tio
     end
+    wait(save_tio)
     @test istaskdone(save_tio)
     res = String(take!(io))
     @test res == repeat(repeat("abc ", 10) * "\n", 5)
 end
 
 @testset "open TaskChain read incomplete" begin
-    data = """
-    Line 1
-    Line 2
-    """
-    fin = IOBuffer(data)
+    dir = dpath("xxx")
+    data = "module ChannelBuffers"
     s = ""
-    open(gzip() | gunzip(), fin) do tio
-        s = readline(tio)
+    open(tarc(dir) | tarxO()) do tio
+        while !eof(tio)
+            s = readline(tio)
+            s == data && break
+        end
         close(tio) # do not read to eof
     end
-    @test s == data[1:6]
+    @test s == data
 end
 
 @testset "don't vclose TTY" begin
     @test ChannelBuffers.vclose(stderr, true) === nothing
+end
+
+@testset "kill TaskChain" begin
+    cin = ChannelPipe()
+    cout = ChannelPipe()
+    tl = run( cin → gzip() | gunzip() → cout, wait=false)
+    write(tl, "hallo")
+    while !istaskstarted(tl)
+        yield()
+    end
+    @test !istaskdone(tl)
+    kill(tl)
+    @test_throws TaskFailedException wait(tl)
+    @test istaskdone(tl)
+    @test istaskfailed(tl)
+
+    tl = run(`sleep 10` | noop(), wait=false)
+    while !istaskstarted(tl)
+        yield()
+    end
+    @test istaskstarted(tl[1])
+    @test !istaskdone(tl)
+    kill(tl)
+    wait(tl)
+    @test istaskdone(tl)
+    @test kill(tl) === nothing
 end

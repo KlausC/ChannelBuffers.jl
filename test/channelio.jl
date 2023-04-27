@@ -19,6 +19,13 @@ function wrcha(bsize=32)
     wio, rio
 end
 
+function isblocking(f::Function, timeout::Real; pollint::Real=0.1)
+    t = schedule(Task(f))
+    res = timedwait(() -> istaskdone(t), timeout; pollint)
+    istaskdone(t) || schedule(t, Nothing; error=true)
+    res === :timed_out
+end
+
 # test if called function is blocked on reading from channel at least at `t` seconds
 function testblock(f, rio, t, args...)
     runabort(rio, t)
@@ -204,10 +211,18 @@ end
     @test position(p.in) == 4
     @test_throws Exception seek(p.in, 3)
     @test peek(p, Char) == read(p, Char)
-    @test_throws Exception seek(p.out, 5)
+    @test isblocking(()->seek(p.out, 7), 0.2)
     close(p.in)
     @test read(p, String) == data[3:4]
     @test close(p) === nothing
+end
+
+@testset "skip to future" begin
+    p = ChannelPipe(10)
+    schedule(Task(()->begin write(p, 'a':'z'); flush(p); end))
+    skip(p.out, 22)
+    close(p.in)
+    @test read(p, 2) == codeunits("wx")
 end
 
 nested(ex::TaskFailedException) = current_exceptions(ex.task)[1].exception
