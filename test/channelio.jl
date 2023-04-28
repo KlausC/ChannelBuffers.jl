@@ -241,3 +241,14 @@ nested(ex::TaskFailedException) = current_exceptions(ex.task)[1].exception
         @test nested(ex) isa InvalidStateException
     end
 end
+
+@testset "read some bytes" begin
+    cio = ChannelPipe()
+    write(cio, "hallo")
+    b = zeros(UInt8, 0)
+    @test readbytes!(cio, b, 10, all=false) == 0
+    flush(cio.in)
+    @test readbytes!(cio, b, 10, all=false) == 5
+    close(cio)
+    @test readbytes!(cio, b, 10) == 0
+end

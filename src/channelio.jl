@@ -17,13 +17,12 @@ mutable struct ChannelIO{RW,T<:AbstractVector{UInt8}} <: AbstractChannelIO
     buffer::T
     bufsize::Int
     offset::Int
-    eofpending::Bool
     position::Int # offset from stream start of first byte in buffer
     mark::Int
     function ChannelIO(ch::Channel, rw::Symbol, buffer::V, bufsize::Integer) where V
         bufsize > 0 || throw(ArgumentError("minimal buffer size is $bufsize"))
         rw == R || rw == W || throw(ArgumentError("read/write must be $R or $W"))
-        new{rw,V}(ch, buffer, bufsize, 0, false, 0, -1)
+        new{rw,V}(ch, buffer, bufsize, 0, 0, -1)
     end
 end
 
@@ -169,7 +168,6 @@ function _destroy(cio::ChannelIO{R})
     catch
         # ignore
     finally
-        cio.eofpending = true
         close(ch)
         resize!(cio.buffer, cio.offset)
         unlock(ch)
@@ -221,33 +219,46 @@ function eof(cio::ChannelIO{R})
     cio.offset < length(cio.buffer) && return false
     #@infiltrate
     takebuffer!(cio)
-    return cio.eofpending && cio.offset >= length(cio.buffer)
+    return cio.offset >= length(cio.buffer)
 end
 
 readbytes!(cio::ChannelIO{W}, ::Vector{UInt8}, ::Any=0; all::Bool=true) = throw_wrong_mode(cio)
 function readbytes!(cio::ChannelIO{R}, b::Vector{UInt8}, nb=length(b); all::Bool=true)
+    all ? readbytes_all!(cio, b, nb) : readbytes_some!(cio, b, nb)
+end
+
+function readbytes_some!(cio::ChannelIO{R}, b::Vector{UInt8}, nb=length(b))
     s = bytesavailable(cio)
-    n = min(s, nb)
+    n = min(s, UInt(nb))
     if n > length(b)
         resize!(b, n)
     end
-    r = unsafe_read(cio, pointer(b, 1), n)
-    if !all || r >= nb
-        return Int(r)
-    end
-    while r < nb && !eof(cio)
-        n = min(nb, r + DEFAULT_BUFFER_SIZE)
-        if n > length(b)
-            resize!(b, n)
+    p = pointer(b, 1)
+    _unsafe_read(cio, p, n)
+end
+
+function readbytes_all!(cio::ChannelIO{R}, b::Vector{UInt8}, nb=length(b))
+    nr = 0
+    k = 1
+    while nr < nb && k != 0
+        n = min(DEFAULT_BUFFER_SIZE, UInt(nb) - nr)
+        if n + nr > length(b)
+            resize!(b, n + nr)
         end
-        k = unsafe_read(cio, pointer(b, r + 1), n - r)
-        r += k
+        p = pointer(b, 1)
+        k = _unsafe_read(cio, p + nr, n)
+        nr += k
     end
-    return Int(r)
+    nr
 end
 
 unsafe_read(cio::ChannelIO{W}, ::Ptr{UInt8}, ::UInt) = throw_wrong_mode(cio)
 function unsafe_read(cio::ChannelIO{R}, pp::Ptr{UInt8}, nn::UInt)
+    nr = _unsafe_read(cio, pp, nn)
+    nr < nn && throw(EOFError())
+    nothing
+end
+function _unsafe_read(cio::ChannelIO{R}, pp::Ptr{UInt8}, nn::UInt)
     p = pp
     n = Int(nn)
     while n > 0 && !eof(cio)
@@ -285,7 +296,6 @@ function takebuffer!(cio::ChannelIO{R})
     cio.position += bufsize
     cio.buffer = buffer
     n = length(buffer)
-    cio.eofpending |= n == 0
     n
 end
 
@@ -358,7 +368,9 @@ unsafe_read(io::ChannelPipe, p::Ptr{UInt8}, n::UInt) = unsafe_read(io.out, p, n)
 eof(io::ChannelPipe) = eof(io.out)
 bytesavailable(io::ChannelPipe) = bytesavailable(io.out)
 peek(io::ChannelPipe) = peek(io.out)
-readbytes!(io::ChannelPipe, p::AbstractVector{UInt8}, n=length(p)) = readbytes!(io.out, p, n)
+function readbytes!(io::ChannelPipe, p::AbstractVector{UInt8}, n=length(p); kw...)
+    readbytes!(io.out, p, n; kw...)
+end
 read(io::ChannelPipe, T::Type{UInt8}) = read(io.out, T)
 pipe_reader(io::ChannelPipe) = io.out
 pipe_writer(io::ChannelPipe) = io.in
