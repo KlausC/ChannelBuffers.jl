@@ -4,9 +4,14 @@
 Store function and arguments. The signature of the function must
 be like `f(cin::IO, cout::IO, args...)`.
 """
-struct BClosure{F<:Function,Args<:Tuple} # <: AbstractCmd resolve ambis first!
-    f::F
+struct BClosure{F,Args<:Tuple}
+    f::Symbol
+    m::Symbol
     args::Args
+    function BClosure(f::Function, args::T) where T
+        nf = nameof(f)
+        new{nf,T}(nf, nameof(parentmodule(f)), args)
+    end
 end
 
 const ClosureCmd = Union{BClosure,AbstractCmd}
@@ -38,7 +43,7 @@ Convenience function to build a pipeline.
 `pipeline(a, b, c)` is essentialy the same as `a → b → c`
 """
 →(a, b) = pipeline(a, b)
-→(ci::UIO, co::UIO) = pipeline(ci, NOOP, co)
+→(ci::UIO, co::UIO) = pipeline(ci, noop(), co)
 
 # combine 2 AbstractCmd into a pipeline
 listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, first(v), v)
@@ -56,13 +61,13 @@ function listcombine(left::Vector, right::Vector)
     listcombine(listcombine(left, first(right)), right[2:end])
 end
 
-# insert a NOOP task to redirect ChannelIO to/from AbstractCmd
+# insert a noop() task to redirect ChannelIO to/from AbstractCmd
 # combine AbstractCmd with other IO
 listnoop(io::UIO, cmd::AbstractCmd) = [pipeline(cmd, stdin=io)]
-listnoop(io::AllChannelIO, cmd::AbstractCmd) = [NOOP, cmd]
+listnoop(io::AllChannelIO, cmd::AbstractCmd) = [noop(), cmd]
 listnoop(io::AllIO, cmd::ClosureCmd) = [cmd]
 listnoop(cmd::AbstractCmd, io::UIO) = [pipeline(cmd, stdout=io)]
-listnoop(cmd::AbstractCmd, io::AllChannelIO) = [cmd, NOOP]
+listnoop(cmd::AbstractCmd, io::AllChannelIO) = [cmd, noop()]
 listnoop(cmd::ClosureCmd, io::AllIO) = [cmd]
 
 listnoop(io::AllIO, v::Vector) = listnoop(io, first(v), v)
@@ -80,6 +85,8 @@ function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
         BClosureList([cmd], something(stdin,DEFAULT_IN), something(out, DEFAULT_OUT))
     end
 end
+
+pipeline(cmd::BClosureList) = cmd
 
 # combine two commands - except case AbstractCmd/AbstractCmd, which is in Base
 pipeline(left::AbstractCmd, right::BClosure) = BClosureList(listcombine(left, right), DEFAULT_IN, DEFAULT_OUT)

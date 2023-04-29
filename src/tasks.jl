@@ -107,8 +107,11 @@ task_code(t::BTask{:Task}) = t.task.code
 task_code(t::BTask{:Threat}) = t.task.code.task_function
 task_cin(t::BTask) = task_code(t).cin
 task_cout(t::BTask) = task_code(t).cout
-task_function(t::BTask) = task_code(t).btd.f
-task_args(t::BTask) = task_code(t).btd.args
+function task_function(t::BTask)
+    bc = task_code(t).bc
+    eval(bc.m).eval(bc.f)
+end
+task_args(t::BTask) = task_code(t).bc.args
 
 to_pipe(cio::ChannelIO) = ChannelPipe(cio)
 to_pipe(cio) = cio
@@ -133,12 +136,12 @@ end
 
 Start all parallel tasks defined in list, io redirection defaults are defined in the list
 """
-function _run(btdl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
-    list = btdl.list
+function _run(bcl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+    list = bcl.list
     n = length(list)
     tv = Vector{Union{Task,AbstractPipe}}(undef, n)
-    cin0 = stdin === DEFAULT_IN ? btdl.cin : stdin
-    cout0 = stdout === DEFAULT_OUT ? btdl.cout : stdout
+    cin0 = stdin === DEFAULT_IN ? bcl.cin : stdin
+    cout0 = stdout === DEFAULT_OUT ? bcl.cout : stdout
     cout = to_pipe(cout0)
     i = n
     # start tasks in reverse order of list
@@ -173,8 +176,8 @@ function _run(btdl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
     return tv, cin0, cout0
 end
 
-function run(btdl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
-    tv, cin0, cout0 = _run(btdl, stdin, stdout)
+function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+    tv, cin0, cout0 = _run(bcl, stdin, stdout)
     tl = TaskChain(BTask{task_thread()}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
     if wait
         Base.wait(tl)
@@ -233,12 +236,13 @@ use_tasks() = Threads.nthreads() <= 1 || Threads.threadid() != 1
 task_thread() = use_tasks() ? :Task : :Threat
 
 # schedule single task
-function _schedule(btd::BClosure, cin, cout)
+function _schedule(bc::BClosure, cin, cout)
     function task_function()
         ci = vopen(cin, false)
         co = vopen(cout, true)
         try
-            btd.f(ci, co, btd.args...)
+            f = eval(bc.m).eval(bc.f)
+            f(ci, co, bc.args...)
         catch
             #= print stack trace to stderr
             for (exc, bt) in current_exceptions()
@@ -276,23 +280,6 @@ end
 vclose(cio::ChannelIO, ::Bool) = close(cio)
 vclose(cio::ChannelPipe, write::Bool) = vclose(pipe_writer(cio), write)
 vclose(::IO, ::Bool) = nothing
-
-# NOOP task - copy cin to cout
-function noop()
-    function _noop(cin::IO, cout::IO)
-        while !eof(cin)
-            write(cout, read(cin))
-        end
-    end
-    closure(_noop)
-end
-
-"""
-    const NOOP
-
-A BClosure which copies input to output unmodified.
-"""
-NOOP = noop()
 
 pipe_reader(tio::TaskChain) = tio.out
 pipe_writer(tio::TaskChain) = tio.in

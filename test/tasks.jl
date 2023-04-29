@@ -1,5 +1,5 @@
 
-using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
+using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args
 
 @testset "BTask{T,Process}" begin
     pl = ChannelBuffers.BClosureList([`false`])
@@ -128,7 +128,7 @@ end
 @testset "noop optimizations" begin
     pi = ChannelPipe()
     po = ChannelPipe()
-    pl = pi → NOOP → po
+    pl = pi → noop() → po
     tl = run(pl, wait=false)
     text = "hallo"
     write(pi, text)
