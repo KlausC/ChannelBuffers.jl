@@ -1,5 +1,8 @@
+using Distributed
 
 abstract type AbstractChannelIO <: IO end
+
+const Channels = Union{AbstractChannel,Distributed.AbstractRemoteRef}
 
 import Base: open, close, readbytes!, Redirectable
 
@@ -12,29 +15,29 @@ const W = :W
 Is read and written like an `IOStream`. If buffers are empty/full transport them using
 channels allowing parallel task pipelining.
 """
-mutable struct ChannelIO{RW,T<:AbstractVector{UInt8}} <: AbstractChannelIO
-    ch::Channel{T}
+mutable struct ChannelIO{RW,T<:AbstractVector{UInt8},C<:Channels} <: AbstractChannelIO
+    ch::C
     buffer::T
     bufsize::Int
     offset::Int
     position::Int # offset from stream start of first byte in buffer
     mark::Int
-    function ChannelIO(ch::Channel, rw::Symbol, buffer::V, bufsize::Integer) where V
+    function ChannelIO(ch::C, rw::Symbol, buffer::V, bufsize::Integer) where {V,C<:Channels}
         bufsize > 0 || throw(ArgumentError("minimal buffer size is $bufsize"))
         rw == R || rw == W || throw(ArgumentError("read/write must be $R or $W"))
-        new{rw,V}(ch, buffer, bufsize, 0, 0, -1)
+        new{rw,V,C}(ch, buffer, bufsize, 0, 0, -1)
     end
 end
 
 const DEFAULT_BUFFER_SIZE = 8192
 const DEFAULT_CHANNEL_LENGTH = 1
 
-struct ChannelPipe{T} <: AbstractPipe
-    in::ChannelIO{W,T}
-    out::ChannelIO{R,T}
-    function ChannelPipe(cin::ChannelIO{W,T}, cout::ChannelIO{R,T}) where T
+struct ChannelPipe{T,C} <: AbstractPipe
+    in::ChannelIO{W,T,C}
+    out::ChannelIO{R,T,C}
+    function ChannelPipe(cin::ChannelIO{W,T,C}, cout::ChannelIO{R,T}) where {T,C}
         cin.ch === cout.ch || throw(ArgumentError("cin and cout must share same Channel"))
-        new{T}(cin, cout)
+        new{T,C}(cin, cout)
     end
 end
 
@@ -49,7 +52,7 @@ ChannelPipe(cio::ChannelIO{W}) = ChannelPipe(cio, reverseof(cio))
 
 const AllChannelIO = Union{ChannelIO,ChannelPipe}
 
-function ChannelIO(ch::Channel, rw::Symbol=R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
+function ChannelIO(ch::Channels, rw::Symbol=R, bufsize::Integer=DEFAULT_BUFFER_SIZE)
     ChannelIO(ch, rw, zeros(UInt8, 0), bufsize)
 end
 

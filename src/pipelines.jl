@@ -1,3 +1,5 @@
+abstract type AbstractRemoteClosureList end
+
 """
     BClosure(f::function, args)
 
@@ -14,10 +16,13 @@ struct BClosure{F,Args<:Tuple}
     end
 end
 
-const ClosureCmd = Union{BClosure,AbstractCmd}
+function show(io::IO, bc::BClosure)
+    print(io, "BClosure(", bc.f, bc.args, ")")
+end
+
 # List of BClosure objects and io redirections
 struct BClosureList{In,Out}
-    list::Vector{ClosureCmd}
+    list::Vector{Union{BClosure,AbstractCmd,AbstractRemoteClosureList}}
     cin::In
     cout::Out
     @noinline function BClosureList(list, cin::In, cout::Out) where {In,Out}
@@ -25,16 +30,37 @@ struct BClosureList{In,Out}
     end
 end
 BClosureList(list) = BClosureList(list, DEFAULT_IN, DEFAULT_OUT)
+
+function show(io::IO, bcl::BClosureList)
+    arrow = " → "
+    print(io, "BClosureList(")
+    bcin(bcl) != DEFAULT_IN && print(io, bcin(bcl), arrow)
+    print(io, join(bclist(bcl), arrow))
+    bcout(bcl) != DEFAULT_OUT && print(io, arrow, bcout(bcl))
+    print(io, ")")
+end
+
+struct RClosureList{IN,OUT} <: AbstractRemoteClosureList
+    id::Int
+    bcl::BClosureList{IN,OUT}
+end
+
+struct RFileRedirect
+    id::Int
+    redirect::Base.FileRedirect
+end
+
 # used for output redirection
-const UIO = Union{IO,AbstractString}
+const UIO = Union{IO,AbstractString,Base.FileRedirect,RFileRedirect,Base.RawFD}
 const AllIO = Union{UIO,AllChannelIO}
 const DEFAULT_IN = devnull
 const DEFAULT_OUT = devnull
-
 const BClosureAndList = Union{BClosure,BClosureList}
 const BClosureListCmd = Union{BClosureAndList,AbstractCmd}
 
-|(left::BClosureListCmd, right::BClosureListCmd) = →(left, right)
+|(left::BClosureListCmd, right::BClosureAndList) = →(left, right)
+|(left::BClosureAndList, right::BClosureListCmd) = →(left, right)
+|(left::BClosureAndList, right::BClosureAndList) = →(left, right)
 
 """
     a → b  (\rightarrow operator)
@@ -43,38 +69,6 @@ Convenience function to build a pipeline.
 `pipeline(a, b, c)` is essentialy the same as `a → b → c`
 """
 →(a, b) = pipeline(a, b)
-→(ci::UIO, co::UIO) = pipeline(ci, noop(), co)
-
-# combine 2 AbstractCmd into a pipeline
-listcombine(cmd::ClosureCmd, v::Vector) = isempty(v) ? [cmd] : listcombine(cmd, first(v), v)
-listcombine(v::Vector, cmd::ClosureCmd) = isempty(v) ? [cmd] : listcombine(v, last(v), cmd)
-listcombine(left::ClosureCmd, right::ClosureCmd) = vcat(left, right)
-listcombine(left::AbstractCmd, right::AbstractCmd) = [pipeline(left, right)]
-listcombine(list::Vector, ::ClosureCmd, right::ClosureCmd) = vcat(list, right)
-listcombine(list::Vector, ::AbstractCmd, right::AbstractCmd) = vcat(list[1:end-1], listcombine(last(list), right))
-listcombine(left::ClosureCmd, ::ClosureCmd, list::Vector) = vcat(left, list)
-listcombine(left::AbstractCmd, ::AbstractCmd, list::Vector) = vcat(listcombine(left, first(list)), list[2:end])
-
-function listcombine(left::Vector, right::Vector)
-    isempty(right) && return left
-    isempty(left) && return right
-    listcombine(listcombine(left, first(right)), right[2:end])
-end
-
-# insert a noop() task to redirect ChannelIO to/from AbstractCmd
-# combine AbstractCmd with other IO
-listnoop(io::UIO, cmd::AbstractCmd) = [pipeline(cmd, stdin=io)]
-listnoop(io::AllChannelIO, cmd::AbstractCmd) = [noop(), cmd]
-listnoop(io::AllIO, cmd::ClosureCmd) = [cmd]
-listnoop(cmd::AbstractCmd, io::UIO) = [pipeline(cmd, stdout=io)]
-listnoop(cmd::AbstractCmd, io::AllChannelIO) = [cmd, noop()]
-listnoop(cmd::ClosureCmd, io::AllIO) = [cmd]
-
-listnoop(io::AllIO, v::Vector) = listnoop(io, first(v), v)
-listnoop(v::Vector, io::AllIO) = listnoop(v, last(v), io)
-
-listnoop(v::Vector, vcmd::ClosureCmd, io::AllIO) = vcat(v[1:end-1], listnoop(v[end], io))
-listnoop(io::AllIO, vcmd::ClosureCmd, v::Vector) = vcat(listnoop(io, v[1]), v[2:end])
 
 # pipeline of one Cmd - in analogy to Base
 function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
@@ -82,35 +76,84 @@ function pipeline(cmd::BClosure; stdin=nothing, stdout=nothing, append=false)
         cmd
     else
         out = append && stdout isa AbstractString ? FileRedirect(stdout, append) : stdout
-        BClosureList([cmd], something(stdin,DEFAULT_IN), something(out, DEFAULT_OUT))
+        BClosureList([cmd], something(stdin, DEFAULT_IN), something(out, DEFAULT_OUT))
     end
 end
 
 pipeline(cmd::BClosureList) = cmd
+pipeline(left, right) = _pipe(left, right)
+pipeline(in::Union{AllChannelIO,BClosure,BClosureList}, cmd::AbstractCmd) = _pipe(in, cmd)
+pipeline(cmd::AbstractCmd, out::Union{AllChannelIO,BClosure,BClosureList}) = _pipe(cmd, out)
 
-# combine two commands - except case AbstractCmd/AbstractCmd, which is in Base
-pipeline(left::AbstractCmd, right::BClosure) = BClosureList(listcombine(left, right), DEFAULT_IN, DEFAULT_OUT)
-pipeline(left::BClosure, right::ClosureCmd) = BClosureList(listcombine(left, right), DEFAULT_IN, DEFAULT_OUT)
+const BRClosure = Union{BClosure,RClosureList}
+const BRClosureList = Union{BRClosure,BClosureList}
 
-# combine Cmd with list
-function pipeline(left::BClosureList, right::ClosureCmd)
-    BClosureList(listcombine(left.list, right), left.cin, DEFAULT_OUT)
+_pipe(left::UIO, right::UIO) = pipeline(left, noop(), right)
+
+_pipe(bcl::BRClosureList, out::AllIO) = _pipe(bcl, out, bcliste(bcl))
+function _pipe(bcl::BRClosureList, out::AllIO, ble::AbstractCmd)
+    BClosureList([bclister(bcl); pipeline(ble, out)], bcin(bcl), bcout(out))
 end
-pipeline(left::AbstractCmd, right::BClosureList) = BClosureList(listcombine(left, right.list), DEFAULT_IN, right.cout)
-pipeline(left::BClosure, right::BClosureList) = BClosureList(listcombine(left, right.list), DEFAULT_IN, right.cout)
+_pipe(bcl::BRClosureList, out::AllIO, ::Any) = BClosureList(bclist(bcl), bcin(bcl), out)
 
-# combine Cmd with IO
-pipeline(left::AllIO, right::BClosure) = BClosureList(listnoop(left, right), left, DEFAULT_OUT)
-pipeline(left::BClosure, right::AllIO) = BClosureList(listnoop(left, right), DEFAULT_IN, right)
-pipeline(left::AllChannelIO, right::AbstractCmd) = BClosureList(listnoop(left, right), left, DEFAULT_OUT)
-pipeline(left::AbstractCmd, right::AllChannelIO) = BClosureList(listnoop(left, right), DEFAULT_IN, right)
-# AbstractCmd with UIO is in Base
-
-# combine two lists
-function pipeline(left::BClosureList, right::BClosureList)
-    BClosureList(listcombine(left.list, right.list), left.cin, right.cout)
+_pipe(bcl::BClosureList, out::AllChannelIO) = _pipe(bcl, out, bcliste(bcl))
+function _pipe(bcl::BClosureList, out::AllChannelIO, ::AbstractCmd)
+    BClosureList([bclist(bcl); noop()], bcin(bcl), out)
 end
 
-# combine list with IO
-pipeline(left::AllIO, right::BClosureList) = BClosureList(listnoop(left, right.list), left, right.cout)
-pipeline(left::BClosureList, right::AllIO) = BClosureList(listnoop(left.list, right), left.cin, right)
+_pipe(in::AllIO, bcl::BRClosureList) = _pipe(in, bcl, bclistb(bcl))
+function _pipe(in::AllIO, bcl::BRClosureList, blb::AbstractCmd)
+    BClosureList([pipeline(in, blb); bclistbr(bcl)], bcin(in), bcout(bcl))
+end
+_pipe(in::AllIO, bcl::BRClosureList, ::Any) = BClosureList(bclist(bcl), in, bcout(bcl))
+
+_pipe(in::AllChannelIO, bcl::BClosureList) = _pipe(in, bcl, bclistb(bcl))
+function _pipe(in::AllChannelIO, bcl::BClosureList, ::AbstractCmd)
+    BClosureList([noop(); bclist(bcl)], in, bcout(bcl))
+end
+
+function _pipe(bc::BRClosureList, bcl::BRClosureList)
+    BClosureList([bclist(bc); bclist(bcl)], bcin(bc), bcout(bcl))
+end
+
+_pipe(cmd::AbstractCmd, out::AllChannelIO) = pipeline(cmd, noop(), out)
+_pipe(in::AllChannelIO, cmd::AbstractCmd) = pipeline(in, noop(), cmd)
+
+_pipe(cmd::AbstractCmd, bc::BRClosure) = _pipe(cmd, bc, nothing)
+_pipe(bc::BRClosure, cmd::AbstractCmd) = _pipe(bc, cmd, nothing)
+
+_pipe(cmd::AbstractCmd, bcl::BClosureList) = _pipe(cmd, bcl, bclistb(bcl))
+function _pipe(cmd::AbstractCmd, bcl::BClosureList, rlb::AbstractCmd)
+    BClosureList([pipeline(cmd, rlb); bclistbr(bcl)], bcin(cmd), bcout(bcl))
+end
+function _pipe(cmd::AbstractCmd, bcl::BRClosureList, ::Any)
+    BClosureList([cmd; bclist(bcl)], bcin(cmd), bcout(bcl))
+end
+
+_pipe(bcl::BClosureList, cmd::AbstractCmd) = _pipe(bcl, cmd, bcliste(bcl))
+function _pipe(bcl::BClosureList, cmd::AbstractCmd, lle::AbstractCmd)
+    BClosureList([bclister(bcl); pipeline(lle, cmd)], bcin(bcl), bcout(cmd))
+end
+function _pipe(bcl::BRClosureList, cmd::AbstractCmd, ::Any)
+    BClosureList([bclist(bcl); cmd], bcin(bcl), bcout(cmd))
+end
+
+function _pipe(bcll::BClosureList, bclr::BClosureList)
+    lle = bcliste(bcll)
+    rlb = bclistb(bclr)
+    cmd = pipeline(lle, rlb)
+    BClosureList([bclister(bcll); bclist(cmd); bclistbr(bclr)], bcll.cin, bclr.cout)
+end
+
+bclist(bcl::BClosureList) = bcl.list
+bclist(a::BRClosureList) = [a]
+
+bclistb(bcl::BRClosureList) = bclist(bcl)[begin]
+bclistbr(bcl::BRClosureList) = bclist(bcl)[begin+1:end]
+bcliste(bcl::BRClosureList) = bclist(bcl)[end]
+bclister(bcl::BRClosureList) = bclist(bcl)[begin:end-1]
+
+bcin(bcl::BClosureList) = bcl.cin
+bcin(::Any) = DEFAULT_IN
+bcout(bcl::BClosureList) = bcl.cout
+bcout(::Any) = DEFAULT_OUT
