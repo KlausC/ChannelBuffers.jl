@@ -113,68 +113,33 @@ function task_function(t::BTask)
 end
 task_args(t::BTask) = task_code(t).bc.args
 
+local_reader(chd::RemoteChannelIODescriptor) = ChannelIO(chd, :R)
+local_writer(chd::RemoteChannelIODescriptor) = ChannelIO(chd, :W)
+local_reader(cio) = pipe_reader2(cio)
+local_writer(cio) = pipe_writer2(cio)
 to_pipe(cio::ChannelIO) = ChannelPipe(cio)
 to_pipe(cio) = cio
 pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
 pipe_reader2(cio::IO) = cio
-pipe_reader2(cio) = DEFAULT_OUT
+pipe_reader2(::Any) = DEFAULT_IN
 pipe_writer2(cio::AbstractPipe) = pipe_writer2(pipe_writer(cio))
 pipe_writer2(cio::IO) = cio
-pipe_writer2(cio) = DEFAULT_IN
+pipe_writer2(::Any) = DEFAULT_OUT
 
 """
     run(BClosure; stdin=devnull, stdout=devnull, wait=true)
 
 Start parallel task redirecting stdin and stdout
 """
-function run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+function run(bt::BRClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
     run(BClosureList([bt]); stdin, stdout, wait)
 end
 
 """
     run(::BClosureList; stdin=devnull, stdout=devnull, wait=true)
 
-Start all parallel tasks defined in list, io redirection defaults are defined in the list
+Start all parallel tasks defined in list, io redirection falls back to BClosureList values.
 """
-function _run(bcl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
-    list = bcl.list
-    n = length(list)
-    tv = Vector{Union{Task,AbstractPipe}}(undef, n)
-    cin0 = stdin === DEFAULT_IN ? bcl.cin : stdin
-    cout0 = stdout === DEFAULT_OUT ? bcl.cout : stdout
-    cout = to_pipe(cout0)
-    i = n
-    # start tasks in reverse order of list
-    while i > 1
-        s = list[i]
-        if s isa AbstractCmd
-            cout = open(s, write=true, read= i == n)
-            tv[i] = cout
-            i -= 1
-        else
-            if list[i-1] isa AbstractCmd
-                cin = open(list[i-1], read=true, write = i > 2)
-                tv[i-1] = cin
-                di = 2
-            else
-                cin = ChannelPipe()
-                di = 1
-            end
-            tv[i] = _schedule(s, cin, cout)
-            cout = cin
-            i -= di
-        end
-    end
-    if i >= 1
-        s = list[i]
-        if s isa AbstractCmd
-            tv[i] = open(s, write=true, read= i == n)
-        else
-            tv[i] = _schedule(s, to_pipe(cin0), cout)
-        end
-    end
-    return tv, cin0, cout0
-end
 
 function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
     tv, cin0, cout0 = _run(bcl, stdin, stdout)
@@ -185,17 +150,128 @@ function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool
     tl
 end
 
+function _schedule(rc::RClosure, cin, cout)
+    remotecall(remoterun, rc.id, rc.bcl, cin, cout)
+end
+
+function remoterun(bcl::BClosureList, cin, cout)
+    stdin = local_reader(cin === devnull ? bcl.cin : cin)
+    stdout = local_writer(cout === devnull ? bcl.cout : cout)
+    tv, cr, cw = _run(bcl, stdin, stdout)
+    tl = TaskChain(BTask{task_thread()}.(tv), cr, cw)
+    sprint(show, MIME"text/plain"(), tl)
+end
+
+function _run(bcl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+    list = bcl.list
+    n = length(list)
+    tv = Vector{Union{Task,AbstractPipe,Future}}(undef, n)
+    io = Vector{AllIO}(undef, n+1)
+    fill!(io, devnull)
+    cin = local_reader(stdin === DEFAULT_IN ? bcl.cin : stdin)
+    cout = local_writer(stdout === DEFAULT_OUT ? bcl.cout : stdout)
+    io[1], io[n+1] = cin, cout
+    # start AbstractCmd first
+    for i = 1:n
+        s = list[i]
+        if s isa AbstractCmd
+            xio = i == 1 ? io[1] : i == n ? io[n+1] : devnull
+            pipe = open(s, xio, write = i > 1, read = i < n)
+            tv[i] = pipe
+            if io[i] === devnull
+                io[i] = pipe
+            else
+                throw_missing_adapter(s, io[i])
+            end
+            if io[n+1] === devnull
+                io[i+1] = pipe
+            end
+        elseif s isa RClosure
+            if io[i+1] === devnull
+                io[i+1] = RemoteChannelIODescriptor(s.id)
+            end
+            if io[i] === devnull
+                io[i] = RemoteChannelIODescriptor(myid())
+            elseif !(io[i] isa RemoteChannelIODescriptor)
+                throw_missing_adapter(s, io[i])
+            end
+        else #if s isa BClosure
+            if i > 1 && io[i] === devnull
+                io[i] = ChannelPipe()
+            end
+        end
+    end
+    io[1], io[n+1] = cin, cout
+    for i = 1:n
+        s = list[i]
+        if s isa BRClosure
+            cin = io[i]
+            cout = io[i+1]
+            tv[i] = _schedule(s, cin, cout)
+        end
+    end
+    return tv, pipe_reader2(io[1]), pipe_writer2(io[n+1])
+end
+
+@noinline function throw_missing_adapter(before, block)
+    throw(ArgumentError("before $before no $block is possible."))
+end
+
+function _oldrun(bcl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+list = bcl.list
+n = length(list)
+tv = Vector{Union{Task,AbstractPipe}}(undef, n)
+cin0 = stdin === DEFAULT_IN ? bcl.cin : stdin
+cout0 = stdout === DEFAULT_OUT ? bcl.cout : stdout
+cin0 = to_localio(cin0)
+cout0 = to_localio(cout0)
+cout = to_pipe(cout0)
+i = n
+# start tasks in reverse order of list
+while i > 1
+    s = list[i]
+    if s isa AbstractCmd
+        cout = open(s, write=true, read= i == n)
+        tv[i] = cout
+        i -= 1
+    else
+        if list[i-1] isa AbstractCmd
+            cin = open(list[i-1], read=true, write = i > 2)
+            tv[i-1] = cin
+            di = 2
+        else
+            cin = ChannelPipe()
+            di = 1
+        end
+        tv[i] = _schedule(s, cin, cout)
+        cout = cin
+        i -= di
+    end
+end
+if i >= 1
+    s = list[i]
+    if s isa AbstractCmd
+        tv[i] = open(s, write=true, read= i == n)
+    else
+
+        println("_schedule($s, $(to_pipe(cin0)), $cout)")
+        tv[i] = _schedule(s, to_pipe(cin0), cout)
+    end
+end
+return tv, cin0, cout0
+end
+
 function readwrite_from_mode(mode::AbstractString)
     read = mode == "r" || mode == "w+" || mode == "r+"
     write = mode == "w" || mode == "w+" || mode == "r+"
     read, write
 end
 
-function open(bt::BClosureAndList, mode::AbstractString, stdio::Redirectable=devnull)
+function open(bt::BRClosureList, mode::AbstractString, stdio::Redirectable=devnull)
     read, write = readwrite_from_mode(mode)
     open(bt, stdio; read, write)
 end
-function open(f::Function, bt::BClosureAndList, mode::AbstractString, stdio::Redirectable=devnull)
+function open(f::Function, bt::BRClosureList, mode::AbstractString, stdio::Redirectable=devnull)
     read, write = readwrite_from_mode(mode)
     open(f, bt, stdio; read, write)
 end
@@ -205,8 +281,8 @@ function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false
     if read && write && stdio != devnull
         throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
     end
-    cout = read ? ChannelIO(R) : stdio == devnull ? cmds.cout : stdio
-    cin = write ? ChannelIO(W) : stdio == devnull ? cmds.cin : stdio
+    cout = read ? ChannelIO(:W) : stdio == devnull ? cmds.cout : stdio
+    cin = write ? ChannelIO(:R) : stdio == devnull ? cmds.cin : stdio
     tv, cin0, cout0 = _run(pipeline(cin, cmds.list..., cout))
     cin0 = write ? cin0 : devnull
     cout0 = read ? cout0 : devnull
@@ -237,6 +313,8 @@ task_thread() = use_tasks() ? :Task : :Threat
 
 # schedule single task
 function _schedule(bc::BClosure, cin, cout)
+    cin = local_reader(cin)
+    cout = local_writer(cout)
     function task_function()
         ci = vopen(cin, false)
         co = vopen(cout, true)
@@ -266,7 +344,7 @@ end
 here(::Union{AbstractString,FileRedirect}) = true
 here(::Any) = false
 vopen(file::AbstractString, write::Bool) = open(file; write)
-vopen(fr::FileRedirect, write::Bool) = open(fr.filename; write=write, append=fr.append)
+vopen(fr::FileRedirect, write::Bool) = open(fr.filename; write, append=fr.append)
 vopen(cio::Any, ::Bool) = cio
 
 vclose(here::Bool, cio, write::Bool) = here ? close(cio) : vclose(cio, write)

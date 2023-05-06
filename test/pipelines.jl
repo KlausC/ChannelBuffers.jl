@@ -23,23 +23,21 @@ end
     end
 end
 @testset "pipeline($x, $y)" for x in (bc, cmd, file), y in (bc, cmd, file)
-    if x === y === file
-        @test length(pipeline(x, y).list) == 1
-    elseif x === bc || y === bc
-        @test pipeline(x, y) isa BClosureList
+    pl = pipeline(x, y)
+    if x === bc || y === bc || ( x === y === file)
+        @test pl isa BClosureList
+        @test length(pl.list) == 2 - (x === file || y == file)
     else
-        @test pipeline(x, y) isa AbstractCmd
+        @test pl isa AbstractCmd
     end
 end
-@testset "pipeline(1,2,3)" begin
-    @test pipeline(bc, bc, bc) isa BClosureList
-    @test pipeline(bc, bc, cmd) isa BClosureList
-    @test pipeline(bc, cmd, bc) isa BClosureList
-    @test pipeline(bc, cmd, cmd) isa BClosureList
-    @test pipeline(cmd, bc, bc) isa BClosureList
-    @test pipeline(cmd, bc, cmd) isa BClosureList
-    @test pipeline(cmd, cmd, bc) isa BClosureList
-    @test pipeline(cmd, cmd, cmd) isa Base.OrCmds
+@testset "pipeline(1,2,3)" for x in (bc, cmd), y in (bc, cmd), z in (bc, cmd)
+    pl = pipeline(x, y, z)
+    allcmds = x === y === z === cmd
+    @test pl isa (allcmds ? Base.OrCmds : BClosureList)
+    if !allcmds
+        @test length(pl.list) == 3 - (y === cmd && (x === y || z === y))
+    end
 end
 
 @testset "pipeline with ChannelIO" for p in (ChannelIO(), ChannelPipe())
@@ -53,6 +51,12 @@ end
 @testset "pipeline with list" begin
     @test length(pipeline(cmd, pipeline(bc, bc)).list) == 3
     @test length(pipeline(cmd, pipeline(cmd, bc)).list) == 2
+end
+
+@testset "pipeline combinations" begin
+    pl = pipeline(cmd, bc, cmd)
+    @test pipeline(cmd, pl, pl) isa BClosureList
+    @test length(pipeline(cmd, pl, pl).list) == 5
 end
 
 @testset "show tasklist" begin

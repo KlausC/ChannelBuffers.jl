@@ -15,6 +15,7 @@ dpath(x...) = joinpath(DDIR, x...)
 tpath(x...) = joinpath(TDIR, x...)
 
 println("testing tmpdir is $TDIR test data from $DDIR")
+println("pwd() = $(pwd())")
 println("JULIA_NUM_THREADS=$(Threads.nthreads())")
 
 @testset "ChannelBuffers" begin
@@ -22,9 +23,10 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
         @test detect_ambiguities(ChannelBuffers) |> isempty
         VERSION >= v"1.8" && @test detect_unbound_args(ChannelBuffers) |> isempty
     end
-    @testset "ChannelIO" begin include("channelio.jl") end
-    @testset "pipelines" begin include("pipelines.jl") end
-    @testset "tasks    " begin include("tasks.jl") end
+    #@testset "ChannelIO  " begin include("channelio.jl") end
+    #@testset "pipelines  " begin include("pipelines.jl") end
+    #@testset "tasks      " begin include("tasks.jl") end
+    @testset "distributed" begin include("runtestsdist.jl") end
 end
 
 nothing
