@@ -104,14 +104,15 @@ end
 @testset "io redirection with pipeline" begin
     fin = tpath("xxx4.tgz")
     fout = tpath("xxx5.tgz")
-    (fin → gunzip() | gzip() → fout) |> run |> wait
+    tl = run(fin → gunzip() | gzip() → fout)
+    @test istaskdone(tl)
     fc = `diff "$fin" "$fout"`
     @test run(fc) !== nothing
 end
 
 @testset "mixed pipline run" begin
     fout = tpath("xxx.txt")
-    pl = pipeline(`ls ../src`, ChannelBuffers.noop(), `cat -`, fout)
+    pl = pipeline(`ls ../src`, noop(), `cat -`, fout)
     tl = run(pl, wait = false)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
@@ -213,7 +214,7 @@ end
 end
 
 @testset "don't vclose TTY" begin
-    @test ChannelBuffers.vclose(stderr, true) === nothing
+    @test ChannelBuffers.vclose(stderr) === nothing
 end
 
 @testset "kill TaskChain" begin

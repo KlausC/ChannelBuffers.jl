@@ -16,9 +16,9 @@ import Base: istaskstarted, istaskdone, istaskfailed
 import Base: |
 
 include("channelio.jl")
-include("distributed.jl")
 include("pipelines.jl")
 include("tasks.jl")
+include("distributed.jl")
 include("specialtasks.jl")
 
 end # module
