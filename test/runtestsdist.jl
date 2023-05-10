@@ -1,6 +1,6 @@
 using Distributed
-addprocs(1)
-addprocs([("127.0.0.1", 1)])
+addprocs(2)
+#addprocs([("127.0.0.1", 1)])
 @everywhere begin
     using Pkg
     Pkg.activate("..")

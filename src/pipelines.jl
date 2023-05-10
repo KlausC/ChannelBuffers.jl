@@ -81,6 +81,12 @@ function show(io::IO, bcl::BClosureList)
     print(io, ")")
 end
 
+function show(io::IO, rc::RClosure)
+    print(io, "RClosure(", rc.id, ", ")
+    show(io, rc.bcl)
+    print(io,")")
+end
+
 # support remote operations
 function at(id::Integer, file::AbstractString, append::Bool=false)
     at(id, Base.FileRedirect(file, append))

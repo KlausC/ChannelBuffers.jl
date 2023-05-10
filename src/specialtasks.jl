@@ -19,6 +19,14 @@ function _noop(cin::IO, cout::IO)
     end
 end
 
+export spy
+spy() = closure(_spy)
+function _spy(cin::IO, cout::IO)
+    _noop(cin, cout)
+    println(cout, "worker $(myid()) thread $(Threads.threadid()) task $(current_task())")
+    println(cout, "from $cin to $cout")
+end
+
 tarc(dir::AbstractString) = closure(_tarc, dir)
 _tarc(::IO, cout::IO, dir::AbstractString) = Tar.create(dir, cout)
 

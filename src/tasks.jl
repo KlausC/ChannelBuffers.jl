@@ -26,6 +26,7 @@ end
 
 An `AbstractPipe` wich contains a list of running tasks and can be used for
 reading and writing. Created by a call to `[open|run](::BClosureList)`.
+A call with `fetch` waits for and returns the result of the last task of chain.
 
 An analogue of `ProcessChain`.
 """
@@ -52,7 +53,8 @@ end
     fetch(tl::TaskChain)
 
 Wait for last Task in to finish, then return its result value.
-If the task fails with an exception, a `TaskFailedException` (which wraps the failed task) is thrown.
+If the task fails with an exception, a `TaskFailedException`
+(which wraps the failed task) is thrown.
 """
 function fetch(tv::TaskChain, ix::Integer=0)
     n = length(tv)
@@ -145,7 +147,7 @@ Start all parallel tasks defined in list, io redirection falls back to BClosureL
 """
 
 function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
-    tv, cin0, cout0 = _run(bcl, stdin, stdout)
+    tv, cin0, cout0 = _run(bcl, stdin, stdout, false, false)
     tl = TaskChain(BTask{task_thread()}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
     if wait
         Base.wait(tl)
@@ -153,54 +155,66 @@ function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool
     tl
 end
 
-function _run(bcl::BClosureList, stdin=DEFAULT_IN, stdout=DEFAULT_OUT)
+function _run(bcl::BClosureList, stdin, stdout, pin::Bool, pout::Bool)
     list = bcl.list
     n = length(list)
-    tv = Vector{Union{Task,AbstractPipe,Future}}(undef, n)
+    tv = Vector{Union{Task,AbstractPipe,Future,TaskChainProxy}}(undef, n)
     io = Vector{AllIO}(undef, n+1)
     fill!(io, devnull)
     cin, cout = overrideio(stdin, stdout, bcl)
     io[1], io[n+1] = cin, cout
-    # start `AbstractCmd`s first
+    # start `AbstractCmd`s first to obtain their io endpoints
     for i = 1:n
         s = list[i]
         if s isa AbstractCmd
             xio = i == 1 ? io[1] : i == n ? io[n+1] : devnull
-            pipe = open(s, xio, write = i > 1, read = i < n)
+            write = i > 1 || xio == devnull
+            read = i < n || xio == devnull
+            pipe = open(s, xio; write, read)
             tv[i] = pipe
-            if io[i] === devnull
-                io[i] = pipe
-            else
-                throw_missing_adapter(s, io[i])
+            if write
+                if io[i] === devnull
+                    io[i] = pipe
+                else
+                    throw_missing_adapter(s, :before, io[i])
+                end
             end
-            if io[n+1] === devnull
-                io[i+1] = pipe
+            if read
+                if io[i+1] === devnull
+                    io[i+1] = pipe
+                else
+                    throw_missing_adapter(s, :after, io[i+1])
+                end
             end
         elseif s isa RClosure
-            if io[i+1] === devnull
-                io[i+1] = RemoteChannelIODescriptor(s.id)
-            end
             if io[i] === devnull
                 io[i] = RemoteChannelIODescriptor(myid())
             elseif !(io[i] isa RemoteChannelIODescriptor)
-                throw_missing_adapter(s, io[i])
+                throw_missing_adapter(s, :before, io[i])
+            end
+            if io[i+1] === devnull
+                io[i+1] = RemoteChannelIODescriptor(s.id)
+            elseif !(io[i+1] isa RemoteChannelIODescriptor)
+                throw_missing_adapter(s, :after, io[i+1])
             end
         else #if s isa BClosure
-            if i > 1 && io[i] === devnull
+            if (pin || i > 1) && io[i] === devnull
                 io[i] = ChannelPipe()
             end
         end
     end
-    io[1], io[n+1] = cin, cout
+    if pout && io[n+1] === devnull
+        io[n+1] = ChannelPipe()
+    end
     for i = 1:n
         s = list[i]
-        if s isa BRClosure
+        if !(s isa AbstractCmd)
             cin = io[i]
             cout = io[i+1]
             tv[i] = _schedule(s, cin, cout)
         end
     end
-    return tv, pipe_reader2(io[1]), pipe_writer2(io[n+1])
+    return tv, local_writer(io[1]), local_reader(io[n+1])
 end
 
 # prefer arguments, but use bcl-values in default case
@@ -210,8 +224,8 @@ function overrideio(stdin, stdout, bcl)
     cin, cout
 end
 
-@noinline function throw_missing_adapter(before, block)
-    throw(ArgumentError("before $before no $block is possible."))
+@noinline function throw_missing_adapter(task, ba, io)
+    throw(ArgumentError("$ba $task no $io is possible."))
 end
 
 function readwrite_from_mode(mode::AbstractString)
@@ -234,12 +248,12 @@ function open(cmds::BClosureList, stdio::Redirectable=devnull; write::Bool=false
     if read && write && stdio != devnull
         throw(ArgumentError("no stream can be specified for `stdio` in read-write mode"))
     end
-    cout = read ? ChannelIO(:W) : stdio == devnull ? cmds.cout : stdio
-    cin = write ? ChannelIO(:R) : stdio == devnull ? cmds.cin : stdio
-    tv, cin0, cout0 = _run(pipeline(cin, cmds.list..., cout))
+    cout = read ? devnull : stdio == devnull ? cmds.cout : stdio
+    cin = write ? devnull : stdio == devnull ? cmds.cin : stdio
+    tv, cin0, cout0 = _run(cmds, cin, cout, write, read)
     cin0 = write ? cin0 : devnull
     cout0 = read ? cout0 : devnull
-    TaskChain(BTask{task_thread()}.(tv), pipe_writer2(cin0), pipe_reader2(cout0))
+    TaskChain(BTask{task_thread()}.(tv), local_writer(cin0), local_reader(cout0))
 end
 
 function open(bt::BClosure, stdio::Redirectable=devnull; write::Bool=false, read::Bool=!write)
@@ -266,6 +280,8 @@ task_thread() = use_tasks() ? :Task : :Threat
 
 # schedule single task
 function _schedule(bc::BClosure, cin, cout)
+
+    output("called _schedule(@$(myid()), $bc, $cin, $cout)")
     cin = local_reader(cin)
     cout = local_writer(cout)
     function task_function()
