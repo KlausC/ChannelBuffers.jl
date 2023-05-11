@@ -3,7 +3,17 @@ struct BTask{X,T}
     task::T
     BTask{X}(t::T) where {X,T} = new{X,T}(t)
 end
-show(io::IO, m::MIME"text/plain", bt::BTask) = show(io, m, bt.task)
+
+function show(io::IO, m::MIME"text/plain", bt::BTask)
+    nprocs() > 1 && print(io, "@", myid(), " ")
+    show(io, m, bt.task)
+end
+function show(io::IO, m::MIME"text/plain", bt::BTask{T,Task} where T)
+    t = bt.task
+    nprocs() > 1 && print(io, "@", myid(), " ")
+    show(io, m, t)
+    print(io, " ", t.code.bc.f, t.code.bc.args)
+end
 fetch(bt::BTask) = fetch(bt.task)
 wait(bt::BTask) = wait(bt.task)
 istaskstarted(bt::BTask)  = istaskstarted(bt.task)
@@ -82,7 +92,7 @@ end
 function show(io::IO, m::MIME"text/plain", tv::TaskChain)
     for t in tv.processes
         show(io, m, t)
-        println(io)
+        t !== last(tv.processes) && println(io)
     end
 end
 

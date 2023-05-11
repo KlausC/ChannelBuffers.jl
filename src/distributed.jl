@@ -4,20 +4,26 @@ using Distributed
 OUTPUT = [] # RemoteChannel(() -> Channel(1000), 1)
 output(s::Any) = push!(OUTPUT, s)
 
-struct TaskProxy
+TASKLISTS = Dict{Any,Any}()
+
+struct TaskChainProxy
     id::Int
-    ptr::Ref{Task}
-    TaskProxy(task::Task) = new(myid(), Ref(task))
+    reference::UInt
+
+    function TaskChainProxy(tc::TaskChain)
+        ref = objectid(tc)
+        TASKLISTS[ref] = tc
+        new(myid(), ref)
+    end
 end
 
-struct TaskChainProxy{IN,OUT}
-    processes::Vector{TaskProxy}
-    in::IN
-    out::OUT
-    function TaskChainProxy(tc::TaskChain{T,I,O}) where {T,I,O}
-        tp = map(bc->TaskProxy(bc.task), tc.processes)
-        new{I,O}(tp, tc.in, tc.out)
+function show(io::IO, m::MIME"text/plain", bt::BTask{T,<:TaskChainProxy} where T)
+    tp = bt.task
+    rs = remotecall_fetch(tp.id, tp.reference) do ref
+        tl = TASKLISTS[ref]
+        sprint(show, m, tl)
     end
+    print(io, rs)
 end
 
 """
