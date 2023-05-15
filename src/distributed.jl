@@ -6,22 +6,33 @@ output(s::Any) = push!(OUTPUT, s)
 
 TASKLISTS = Dict{Any,Any}()
 
-struct TaskChainProxy
+mutable struct TaskChainProxy
     id::Int
     reference::UInt
-
     function TaskChainProxy(tc::TaskChain)
         ref = objectid(tc)
-        TASKLISTS[ref] = tc
-        new(myid(), ref)
+        x = new(myid(), ref)
+        TASKLISTS[ref] = (proxy=x, tc=tc)
+        finalizer(fin, x)
     end
+end
+
+function fin(tr::TaskChainProxy)
+    if myid() == tr.id
+        delete!(TASKLISTS, tr.reference)
+    else
+        remotecall_fetch(tr.id, tr.reference) do ref
+            delete!(ChannelBuffers.TASKLISTS, ref)
+        end
+    end
+    nothing
 end
 
 function show(io::IO, m::MIME"text/plain", bt::BTask{T,<:TaskChainProxy} where T)
     tp = bt.task
     rs = remotecall_fetch(tp.id, tp.reference) do ref
-        tl = TASKLISTS[ref]
-        sprint(show, m, tl)
+        tl = get(TASKLISTS, ref, nothing)
+        tl === nothing ? "@$(tp.id) TaskChain   @$(repr(ref))" : sprint(show, m, tl.tc)
     end
     print(io, rs)
 end

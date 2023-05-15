@@ -1,6 +1,6 @@
 using Distributed
 addprocs(2)
-addprocs([("127.0.0.1", 1)])
+addprocs([("klauspc", 1)])
 @everywhere begin
     using Pkg
     Pkg.activate(".")
