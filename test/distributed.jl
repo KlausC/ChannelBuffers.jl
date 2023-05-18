@@ -1,4 +1,9 @@
 
+@static if !isdefined(@__MODULE__, :P2)
+    P2 = 2
+    P3 = 3
+end
+
 using ChannelBuffers: channel_length, localchannel
 using ChannelBuffers: RemoteChannelIODescriptor
 
@@ -9,7 +14,7 @@ function setup_pipe(closure)
     cr = ChannelIO(chdw, :R)
 
     pl = pipeline(chdr, closure, chdw)
-    fu = run(at(3, pl), wait=false)
+    fu = run(at(P3, pl), wait=false)
     return chdw, chdr, cw, cr, pl, fu
 end
 
@@ -23,7 +28,7 @@ end
 
 #=
 pl = ("LICENSE.md" → noop() → `sleep 5`)
-res = remotecall(run, 2, pl)
+res = remotecall(run, P2, pl)
 fetch(res)
 =#
 
@@ -42,7 +47,7 @@ end
 @testset "remote pipeline closures" begin
     cw = ChannelIO(:W)
     cr = ChannelIO(:R)
-    pl = pipeline(cw, noop(), at(3, noop()), noop(), cr)
+    pl = pipeline(cw, noop(), at(P3, noop()), noop(), cr)
     tl = run(pl, wait=false)
     data = "test data\n" ^10000
     @async begin write(cw, data); close(cw); end
