@@ -12,7 +12,8 @@ function show(io::IO, m::MIME"text/plain", bt::BTask{T,Task} where T)
     t = bt.task
     nprocs() > 1 && print(io, "@", myid(), " ")
     show(io, m, t)
-    print(io, " ", t.code.bc.f, t.code.bc.args)
+    bc = task_code(bt).bc
+    print(io, " ", bc.f, bc.args)
 end
 fetch(bt::BTask) = fetch(bt.task)
 wait(bt::BTask) = wait(bt.task)
@@ -134,6 +135,9 @@ local_writer(cio::ChannelIO) = pipe_writer2(cio)
 local_reader(cio) = cio
 local_writer(cio) = cio
 
+remote_bridge(chd::RemoteChannelIODescriptor) = chd
+remote_bridge(::Any) = DEFAULT_IN
+
 pipe_reader2(cio::AbstractPipe) = pipe_reader2(pipe_reader(cio))
 pipe_reader2(cio::IO) = cio
 pipe_reader2(::Any) = DEFAULT_IN
@@ -144,10 +148,21 @@ pipe_writer2(::Any) = DEFAULT_OUT
 """
     run(BClosure; stdin=devnull, stdout=devnull, wait=true)
 
-Start parallel task redirecting stdin and stdout
+Start parallel task redirecting stdin and stdout.
 """
-function run(bt::BRClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+function run(bt::BClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
     run(BClosureList([bt]); stdin, stdout, wait)
+end
+"""
+    run(RClosure; stdin=devnull, stdout=devnull, wait=true)
+
+Start parallel remote task, redirect remote channels if available.
+"""
+function run(bt::RClosure; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool=true)
+    bcl = bt.bcl
+    cin = remote_bridge(bcl.cin)
+    cout = remote_bridge(bcl.cout)
+    run(BClosureList([bt], cin, cout); stdin, stdout, wait)
 end
 
 """

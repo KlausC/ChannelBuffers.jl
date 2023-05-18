@@ -33,6 +33,11 @@ struct RemoteChannelIODescriptor
     ch::RemoteChannel
     bufsize::Int
 end
+"""
+    RemoteChannelIODescriptor(id[, chlen])
+
+Construct `RemoteChannelIODescriptor` located at `id` and `Channel{Vector{UInt8}(chlen)`.
+"""
 function RemoteChannelIODescriptor(id::Integer, bufsize=DEFAULT_BUFFER_SIZE)
     T = Vector{UInt8}
     ch = RemoteChannel(() -> Channel{T}(DEFAULT_CHANNEL_LENGTH), id)

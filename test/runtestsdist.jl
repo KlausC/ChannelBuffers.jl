@@ -1,4 +1,6 @@
 using Distributed
+using ChannelBuffers
+cd(pkgdir(ChannelBuffers, "test"))
 addprocs(2)
 #addprocs([("127.0.0.1", 1)])
 @everywhere begin
