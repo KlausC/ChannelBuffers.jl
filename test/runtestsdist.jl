@@ -1,11 +1,11 @@
 using Distributed
 using ChannelBuffers
-cd(pkgdir(ChannelBuffers, "test"))
+#cd(pkgdir(ChannelBuffers, "test"))
 addprocs(2)
 PROCS = procs()
 P2 = PROCS[end-1]
 P3 = PROCS[end]
-println("procs = ", PROCS)
+#println("procs = ", PROCS)
 #addprocs([("127.0.0.1", 1)])
 #=
 @everywhere begin
@@ -20,4 +20,4 @@ end
 
 include("distributed.jl")
 
-rmprocs(P2, P3)
+#rmprocs(P2, P3)
