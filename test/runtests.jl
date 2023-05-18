@@ -29,7 +29,8 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
     println("finished pipelines")
     @testset "tasks      " begin include("tasks.jl") end
     println("finished tasks")
-    #@testset "distributed" begin include("runtestsdist.jl") end
+    @testset "distributed" begin include("runtestsdist.jl") end
+    println("finished distributed")
 end
 
 nothing

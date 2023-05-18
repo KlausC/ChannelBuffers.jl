@@ -214,7 +214,8 @@ end
 end
 
 @testset "don't vclose TTY" begin
-    @test ChannelBuffers.vclose(stderr) === nothing
+    tty = stderr
+    tty isa Base.TTY && @test ChannelBuffers.vclose(tty) === nothing
 end
 
 @testset "kill TaskChain" begin
