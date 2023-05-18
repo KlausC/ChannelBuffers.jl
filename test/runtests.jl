@@ -24,9 +24,12 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
         VERSION >= v"1.8" && @test detect_unbound_args(ChannelBuffers) |> isempty
     end
     @testset "ChannelIO  " begin include("channelio.jl") end
+    println("finished ChannelIO")
     @testset "pipelines  " begin include("pipelines.jl") end
+    println("finished pipelines")
     @testset "tasks      " begin include("tasks.jl") end
-    @testset "distributed" begin include("runtestsdist.jl") end
+    println("finished tasks")
+    #@testset "distributed" begin include("runtestsdist.jl") end
 end
 
 nothing

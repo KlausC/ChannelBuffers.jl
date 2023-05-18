@@ -1,6 +1,6 @@
 using Distributed
 using ChannelBuffers
-#cd(pkgdir(ChannelBuffers, "test"))
+cd(pkgdir(ChannelBuffers, "test"))
 addprocs(2)
 PROCS = procs()
 P2 = PROCS[end-1]
@@ -20,4 +20,4 @@ end
 
 include("distributed.jl")
 
-#rmprocs(P2, P3)
+rmprocs(P2, P3)
