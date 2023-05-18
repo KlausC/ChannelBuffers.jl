@@ -64,8 +64,8 @@ function _schedule(rc::RClosure, cin, cout)
     remotecall_fetch(remoterun, rc.id, rc.bcl, cin, cout)
 end
 
-function remoterun(bcl::BClosureList, stdin, stdout)
-    cin, cout = overrideio(stdin, stdout, bcl)
+function remoterun(bcl::BClosureList, stdi, stdo)
+    cin, cout = overrideio(stdi, stdo, bcl)
     tv, cr, cw = _run(bcl, cin, cout, false, false)
     tl = TaskChain(BTask{task_thread()}.(tv), cr, cw)
     # return sprint(show, MIME"text/plain"(), tl) # TODO return serializable task proxy

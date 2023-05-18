@@ -180,13 +180,13 @@ function run(bcl::BClosureList; stdin=DEFAULT_IN, stdout=DEFAULT_OUT, wait::Bool
     tl
 end
 
-function _run(bcl::BClosureList, stdin, stdout, pin::Bool, pout::Bool)
+function _run(bcl::BClosureList, stdi, stdo, pin::Bool, pout::Bool)
     list = bcl.list
     n = length(list)
     tv = Vector{Union{Task,AbstractPipe,Future,TaskChainProxy}}(undef, n)
     io = Vector{AllIO}(undef, n+1)
     fill!(io, devnull)
-    cin, cout = overrideio(stdin, stdout, bcl)
+    cin, cout = overrideio(stdi, stdo, bcl)
     io[1], io[n+1] = cin, cout
     # start `AbstractCmd`s first to obtain their io endpoints
     for i = 1:n
@@ -243,9 +243,9 @@ function _run(bcl::BClosureList, stdin, stdout, pin::Bool, pout::Bool)
 end
 
 # prefer arguments, but use bcl-values in default case
-function overrideio(stdin, stdout, bcl)
-    cin = (stdin === DEFAULT_IN ? bcl.cin : stdin)
-    cout = (stdout === DEFAULT_OUT ? bcl.cout : stdout)
+function overrideio(stdi, stdo, bcl)
+    cin = (stdi === DEFAULT_IN ? bcl.cin : stdi)
+    cout = (stdo === DEFAULT_OUT ? bcl.cout : stdo)
     cin, cout
 end
 
