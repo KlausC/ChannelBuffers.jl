@@ -84,13 +84,12 @@ function Base.kill(bc::BTask{T,<:Task}, signum=Base.SIGTERM) where T
 end
 
 function Base.kill(tl::TaskChain)
-    x = findfirst(is_notyet_done, tl.processes)
-    while x !== nothing
+    x = 0
+    while (x = findnext(is_notyet_done, tl.processes, x + 1)) !== nothing
         kill(tl[x])
         if x < length(tl.processes)
             sleep(0.1) # give time for following task to terminate without killing it
             yield()
-            x = findnext(is_notyet_done, tl.processes, x + 1)
         end
     end
     nothing
@@ -332,10 +331,10 @@ function _schedule(bc::BClosure, cin, cout)
             =#
             rethrow()
         finally
-            println("finished $(bc.f)$(bc.args)")
-            println("closing in:  $ci")
+            #println("finished $(bc.f)$(bc.args)")
+            #println("closing in:  $ci")
             vclose(cin, ci)
-            println("closing out: $co")
+            #println("closing out: $co")
             vclose(cout, co)
         end
     end
