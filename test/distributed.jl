@@ -47,7 +47,7 @@ end
 @testset "remote pipeline closures" begin
     cw = ChannelIO(:W)
     cr = ChannelIO(:R)
-    pl = pipeline(cw, noop(), at(P3, noop()), noop(), cr)
+    pl = pipeline(cw, noop(11), at(P3, noop(12)), noop(13), cr)
     tl = run(pl, wait=false)
     data = "test data\n" ^10000
     @async begin write(cw, data); close(cw); end
