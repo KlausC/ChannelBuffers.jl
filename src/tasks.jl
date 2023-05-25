@@ -74,8 +74,13 @@ function Base.kill(bc::BTask{T,<:Process}, signum=Base.SIGTERM) where T
 end
 function Base.kill(bc::BTask{T,<:Task}, signum=Base.SIGTERM) where T
     ex = ErrorException("Task $bc was killed($signum)")
-    schedule(bc.task, ex, error=true)
-    yield()
+    if is_notyet_done(bc.task)
+        try
+            schedule(bc.task, ex, error=true)
+        finally
+            yield()
+        end
+    end
 end
 
 function Base.kill(tl::TaskChain)
