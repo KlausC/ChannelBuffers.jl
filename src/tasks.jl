@@ -324,7 +324,10 @@ function _schedule(bc::BClosure, cin, cout)
             =#
             rethrow()
         finally
+            println("finished $(bc.f)$(bc.args)")
+            println("closing in:  $ci")
             vclose(cin, ci)
+            println("closing out: $co")
             vclose(cout, co)
         end
     end
@@ -341,7 +344,7 @@ vopen(cio::Any, ::Bool) = cio
 
 vclose(cio, handle) = cio != handle ? close(handle) : vclose(handle)
 
-# vclose(::TTY) = nothing # covered by IO must not be changed to avoid REPL kill
+vclose(::TTY) = nothing # covered by IO must not be changed to avoid REPL kill
 vclose(cio::ChannelIO) = close(cio)
 vclose(cio::Base.PipeEndpoint) = close(cio)
 vclose(::IO) = nothing
