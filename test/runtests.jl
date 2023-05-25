@@ -23,8 +23,8 @@ println("JULIA_NUM_THREADS=$(Threads.nthreads())")
         @test detect_ambiguities(ChannelBuffers) |> isempty
         VERSION >= v"1.8" && @test detect_unbound_args(ChannelBuffers) |> isempty
     end
-#  @testset "ChannelIO  " begin include("channelio.jl") end
-# println("finished ChannelIO")
+    @testset "ChannelIO  " begin include("channelio.jl") end
+    println("finished ChannelIO")
     @testset "pipelines  " begin include("pipelines.jl") end
     println("finished pipelines")
     @testset "tasks      " begin include("tasks.jl") end
