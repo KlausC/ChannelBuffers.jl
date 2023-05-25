@@ -12,16 +12,16 @@ export serializer, deserializer
 const DEFAULT_READ_BUFFER_SIZE = DEFAULT_BUFFER_SIZE
 
 # noop() task - copy cin to cout
-noop(arg...) = closure(_noop, arg)
-function _noop(cin::IO, cout::IO, arg)
+noop(arg...) = closure(_noop, arg...)
+function _noop(cin::IO, cout::IO, arg...)
     while !eof(cin)
         write(cout, read(cin, DEFAULT_READ_BUFFER_SIZE))
     end
 end
 
 export spy
-spy(arg...) = closure(_spy, arg)
-function _spy(cin::IO, cout::IO, arg)
+spy(arg...) = closure(_spy, arg...)
+function _spy(cin::IO, cout::IO, arg...)
     _noop(cin, cout, arg)
     println(cout, "worker $(myid()) thread $(Threads.threadid()) task $(current_task())")
     println(cout, "from $cin to $cout")

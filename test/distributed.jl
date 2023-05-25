@@ -19,7 +19,7 @@ function setup_pipe(closure)
 end
 
 @testset "run at" begin
-    chdw, chdr, cw, cr, pl, fu = setup_pipe(noop())
+    chdw, chdr, cw, cr, pl, fu = setup_pipe(noop(10))
     data = "hallo\n" ^ 100
     write(cw, data)
     close(cw)
@@ -27,7 +27,7 @@ end
 end
 
 #=
-pl = ("LICENSE.md" → noop() → `sleep 5`)
+pl = ("LICENSE.md" → noop(9) → `sleep 5`)
 res = remotecall(run, P2, pl)
 fetch(res)
 =#

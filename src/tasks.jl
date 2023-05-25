@@ -50,15 +50,9 @@ end
 """
     wait(tl::TaskChain)
 
-Wait for the last task in the list to finish.
+Wait for the all tasks in the list to finish.
 """
-function wait(tv::TaskChain, ix::Integer=0)
-    n = length(tv)
-    i = ix == 0 ? n : Int(ix)
-    0 < n || return nothing
-    0 < i <= n || throw(BoundsError(tv, i))
-    @inbounds wait(tv[i])
-end
+wait(x::TaskChain) = foreach(wait, x.processes)
 
 """
     fetch(tl::TaskChain)
@@ -85,10 +79,19 @@ function Base.kill(bc::BTask{T,<:Task}, signum=Base.SIGTERM) where T
 end
 
 function Base.kill(tl::TaskChain)
-    x = findfirst(t->istaskstarted(t) && !istaskdone(t), tl.processes)
-    x !== nothing && kill(tl[x])
+    x = findfirst(is_notyet_done, tl.processes)
+    while x !== nothing
+        kill(tl[x])
+        if x < length(tl.processes)
+            sleep(0.1) # give time for following task to terminate without killing it
+            yield()
+            x = findnext(is_notyet_done, tl.processes, x + 1)
+        end
+    end
     nothing
 end
+
+is_notyet_done(t) = istaskstarted(t) && !istaskdone(t)
 
 function show(io::IO, m::MIME"text/plain", tv::TaskChain)
     for t in tv.processes

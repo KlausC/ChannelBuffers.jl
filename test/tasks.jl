@@ -218,6 +218,14 @@ end
     tty isa Base.TTY && @test ChannelBuffers.vclose(tty) === nothing
 end
 
+@testset "wait for all tasks to finish" begin
+    a = time()
+    tl = run(`sleep 2` | noop(15) | `sleep 1`, wait=false)
+    wait(tl)
+    b = time()
+    @test b - a > 2
+end
+
 @testset "kill TaskChain" begin
     cin = ChannelPipe()
     cout = ChannelPipe()
