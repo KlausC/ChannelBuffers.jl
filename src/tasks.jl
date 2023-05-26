@@ -319,6 +319,10 @@ function _schedule(bc::BClosure, cin, cout)
     function task_function()
         ci = vopen(cin, false)
         co = vopen(cout, true)
+        if !isopen(ci)
+            println("$ci was not open when task $(bc.f) was started")
+            println("$co")
+        end
         try
             f = eval(bc.m).eval(bc.f)
             f(ci, co, bc.args...)
@@ -352,8 +356,8 @@ vopen(cio::Any, ::Bool) = cio
 vclose(cio, handle) = cio != handle ? close(handle) : vclose(handle)
 
 vclose(::TTY) = nothing # covered by IO must not be changed to avoid REPL kill
-vclose(cio::ChannelIO) = close(cio)
-vclose(cio::Base.PipeEndpoint) = close(cio)
+vclose(cio::ChannelIO) = isopen(cio) && close(cio)
+vclose(cio::Base.PipeEndpoint) = isopen(cio) && close(cio)
 vclose(::IO) = nothing
 
 pipe_reader(tio::TaskChain) = tio.out

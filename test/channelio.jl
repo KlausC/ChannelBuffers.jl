@@ -99,7 +99,7 @@ end
     buffer = codeunits("abcdef")
     put!(rio.ch, buffer)
     close(rio)
-    @test !isopen(rio)
+    @test eof(rio)
     @test bytesavailable(rio) == 0
     @test eof(rio)
     @test startswith(sprint(show, rio), "ChannelIO")

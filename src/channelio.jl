@@ -102,7 +102,9 @@ pipe_writer2(cio::ChannelIO{:R}) = ChannelIO(cio.ch, :W, cio.bufsize)
 pipe_reader2(cio::RemoteChannelIODescriptor) = cio
 pipe_writer2(cio::RemoteChannelIODescriptor) = cio
 
-isopen(cio::ChannelIO{:R}) = isopen(cio.ch) || isready(cio.ch)
+function isopen(cio::ChannelIO{:R})
+    cio.offset < length(cio.buffer) || isopen(cio.ch) || isready(cio.ch)
+end
 isopen(cio::ChannelIO{:W}) = isopen(cio.ch)
 
 @noinline function throw_invalid(cio::ChannelIO{RW}) where RW
@@ -195,6 +197,7 @@ function _destroy(cio::ChannelIO{:R,T,<:Channel} where T)
         while isready(ch)
             take!(ch)
         end
+        cio.offset = 0
     catch
         # ignore
     finally

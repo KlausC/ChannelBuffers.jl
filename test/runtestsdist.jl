@@ -3,6 +3,7 @@ using ChannelBuffers
 cd(pkgdir(ChannelBuffers, "test"))
 addprocs(2)
 PROCS = procs()
+P1 = 1
 P2 = PROCS[end-1]
 P3 = PROCS[end]
 println("procs = ", PROCS)

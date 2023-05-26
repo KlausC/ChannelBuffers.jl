@@ -1,15 +1,10 @@
 
-@static if !isdefined(@__MODULE__, :P2)
-    P2 = 2
-    P3 = 3
-end
-
 using ChannelBuffers: channel_length, localchannel
 using ChannelBuffers: RemoteChannelIODescriptor
 
 function setup_pipe(closure)
-    chdw = RemoteChannelIODescriptor(3)
-    chdr = RemoteChannelIODescriptor(1, 1024)
+    chdw = RemoteChannelIODescriptor(P3)
+    chdr = RemoteChannelIODescriptor(P1, 1024)
     cw = ChannelIO(chdr, :W)
     cr = ChannelIO(chdw, :R)
 
@@ -28,7 +23,7 @@ end
 
 #=
 pl = ("LICENSE.md" → noop(9) → `sleep 5`)
-res = remotecall(run, P2, pl)
+res = remotecall(run, 2, pl)
 fetch(res)
 =#
 
