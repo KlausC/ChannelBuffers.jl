@@ -193,6 +193,7 @@ end
 function _destroy(cio::ChannelIO{:R,T,<:Channel} where T)
     ch = cio.ch
     lock(ch)
+    close(ch)
     try
         while isready(ch)
             take!(ch)
@@ -201,7 +202,6 @@ function _destroy(cio::ChannelIO{:R,T,<:Channel} where T)
     catch
         # ignore
     finally
-        close(ch)
         resize!(cio.buffer, cio.offset)
         unlock(ch)
     end
@@ -226,6 +226,7 @@ end
 
 function _destroy(cio::ChannelIO{:R,T,<:RemoteChannel} where T)
     ch = cio.ch
+    close(ch)
     try
         while isready(ch)
             take!(ch)
@@ -233,7 +234,6 @@ function _destroy(cio::ChannelIO{:R,T,<:RemoteChannel} where T)
     catch
         # ignore
     finally
-        close(ch)
         resize!(cio.buffer, cio.offset)
     end
     nothing
