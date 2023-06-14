@@ -195,6 +195,7 @@ function _run(bcl::BClosureList, stdi, stdo, pin::Bool, pout::Bool)
     fill!(io, devnull)
     cin, cout = overrideio(stdi, stdo, bcl)
     io[1], io[n+1] = cin, cout
+    println("_run($bcl, $stdi, $stdo, $pin, $pout)")
     # start `AbstractCmd`s first to obtain their io endpoints
     for i = 1:n
         s = list[i]
@@ -202,6 +203,7 @@ function _run(bcl::BClosureList, stdi, stdo, pin::Bool, pout::Bool)
             xio = i == 1 ? io[1] : i == n ? io[n+1] : devnull
             write = i > 1 || xio == devnull
             read = i < n || xio == devnull
+            println("open($s, $xio; write=$write, read=$read)")
             pipe = open(s, xio; write, read)
             tv[i] = pipe
             if write

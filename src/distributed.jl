@@ -28,6 +28,22 @@ function fin(tr::TaskChainProxy)
     nothing
 end
 
+function Base.fetch(tr::TaskChainProxy)
+    remotecall_fetch(tr.id, tr.reference) do ref
+        tl = get(ChannelBuffers.TASKLISTS, ref, nothing)
+        if tl !== nothing
+            fetch(tl.tc)
+        else
+            nothing
+        end
+    end
+end
+
+function Base.wait(tr::TaskChainProxy)
+    fetch(tr)
+    nothing
+end
+
 function show(io::IO, m::MIME"text/plain", bt::BTask{T,<:TaskChainProxy} where T)
     tp = bt.task
     rs = remotecall_fetch(tp.id, tp.reference) do ref
