@@ -2,10 +2,11 @@ name = "ChannelBuffers"
 uuid = "79a69506-cdd1-4876-b8e5-7af85e53af4f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 authors = ["Klaus Crusius <klaus.crusius@web.de>"]
-version = "0.4"
+version = "0.5.0"
 
 [deps]
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 Serialization = "9e88b42a-f829-5b0c-bbe9-9e923198166b"
 Tar = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
@@ -20,6 +21,7 @@ julia = "1"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Pkg"]

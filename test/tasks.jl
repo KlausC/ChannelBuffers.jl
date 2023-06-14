@@ -1,5 +1,5 @@
 
-using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args, NOOP
+using ChannelBuffers: BTask, task_function, task_cin, task_cout, task_args
 
 @testset "BTask{T,Process}" begin
     pl = ChannelBuffers.BClosureList([`false`])
@@ -69,7 +69,7 @@ end
 end
 
 @testset "copy file" begin
-    cpy = source(tpath("xxx.tgz")) | destination(tpath("xxx2.tgz")) → stdout
+    cpy = source(tpath("xxx.tgz")) | destination(tpath("xxx2.tgz")) → devnull
     tl = run(cpy, wait=false)
     @test length(tl) == 2
     @test tl[2] isa BTask
@@ -104,14 +104,15 @@ end
 @testset "io redirection with pipeline" begin
     fin = tpath("xxx4.tgz")
     fout = tpath("xxx5.tgz")
-    (fin → gunzip() | gzip() → fout) |> run |> wait
+    tl = run(fin → gunzip() | gzip() → fout)
+    @test istaskdone(tl)
     fc = `diff "$fin" "$fout"`
     @test run(fc) !== nothing
 end
 
 @testset "mixed pipline run" begin
     fout = tpath("xxx.txt")
-    pl = pipeline(`ls ../src`, ChannelBuffers.noop(), `cat -`, fout)
+    pl = pipeline(`ls ../src`, noop(1), `cat -`, fout)
     tl = run(pl, wait = false)
     @test wait(tl) === nothing
     @test run(pipeline(`ls ../src`, `cmp - $fout`)) !== nothing
@@ -128,7 +129,7 @@ end
 @testset "noop optimizations" begin
     pi = ChannelPipe()
     po = ChannelPipe()
-    pl = pi → NOOP → po
+    pl = pi → noop(2) → po
     tl = run(pl, wait=false)
     text = "hallo"
     write(pi, text)
@@ -139,7 +140,7 @@ end
 @testset "open task chain for reading" begin
     data = "hello world!" ^ 10000
     io = IOBuffer(data)
-    tio = open(noop(), io; read=true)
+    tio = open(noop(3), io; read=true)
     yield()
     @test tio isa ChannelBuffers.TaskChain
     @test istaskstarted(tio)
@@ -156,7 +157,7 @@ end
     @test position(cio) == length(data)
 end
 
-@testset "open BClosure" for pl in ( noop(), gzip() | gunzip())
+@testset "open BClosure" for pl in ( noop(4), gzip() | gunzip())
     @test_throws ArgumentError open(pl, "r+", stdout)
     tl = open(pl, "r+")
     @test tl.in isa ChannelBuffers.ChannelIO
@@ -185,7 +186,7 @@ end
 @testset "open task chain for writing" begin
     io = IOBuffer()
     save_tio = nothing
-    open(gzip() | noop() | gunzip(), io, write=true) do tio
+    open(gzip() | noop(5) | gunzip(), io, write=true) do tio
         for i = 1:5
             println(tio, repeat("abc ", 10))
         end
@@ -213,7 +214,16 @@ end
 end
 
 @testset "don't vclose TTY" begin
-    @test ChannelBuffers.vclose(stderr, true) === nothing
+    tty = stderr
+    tty isa Base.TTY && @test ChannelBuffers.vclose(tty) === nothing
+end
+
+@testset "wait for all tasks to finish" begin
+    a = time()
+    tl = run(`sleep 2` | noop(15) | `sleep 1`, wait=false)
+    wait(tl)
+    b = time()
+    @test b - a > 2
 end
 
 @testset "kill TaskChain" begin
@@ -230,7 +240,7 @@ end
     @test istaskdone(tl)
     @test istaskfailed(tl)
 
-    tl = run(`sleep 10` | noop(), wait=false)
+    tl = run(`sleep 10` | noop(6), wait=false)
     while !istaskstarted(tl)
         yield()
     end

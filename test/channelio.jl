@@ -82,7 +82,7 @@ end
     @test_throws InvalidStateException readbytes!(wio, UInt8[])
     @test_throws InvalidStateException peek(wio)
     @test_throws InvalidStateException eof(wio)
-    @test_throws InvalidStateException bytesavailable(wio)
+    @test bytesavailable(wio) == 0
     @test_throws InvalidStateException unsafe_read(wio, Ptr{UInt8}(0), UInt(0))
     @test flush(wio) === nothing
 end
@@ -99,7 +99,7 @@ end
     buffer = codeunits("abcdef")
     put!(rio.ch, buffer)
     close(rio)
-    @test !isopen(rio)
+    @test eof(rio)
     @test bytesavailable(rio) == 0
     @test eof(rio)
     @test startswith(sprint(show, rio), "ChannelIO")

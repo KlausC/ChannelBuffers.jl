@@ -1,9 +1,11 @@
 module ChannelBuffers
 
 export ChannelIO, ChannelPipe, →
-export reverseof, noop
+export reverseof, noop, at
 
 using Base: Process, AbstractPipe, AbstractCmd, FileRedirect, TTY
+
+# all these functions are re-implemented and explicitly imported
 import Base: pipe_reader, pipe_writer
 import Base: run, open, close, wait, fetch, eof, read, write, flush
 import Base: show, length, getindex
@@ -16,6 +18,7 @@ import Base: |
 include("channelio.jl")
 include("pipelines.jl")
 include("tasks.jl")
+include("distributed.jl")
 include("specialtasks.jl")
 
 end # module
