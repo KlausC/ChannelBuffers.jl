@@ -219,7 +219,7 @@ end
 
 @testset "skip to future" begin
     p = ChannelPipe(10)
-    schedule(Task(()->begin write(p, 'a':'z'); flush(p); end))
+    schedule(Task(()->begin write(p, String('a':'z')); flush(p); end))
     skip(p.out, 22)
     close(p.in)
     @test read(p, 2) == codeunits("wx")

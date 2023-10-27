@@ -2,9 +2,6 @@
 using ChannelBuffers: BClosure, BClosureList, closure, DEFAULT_IN, DEFAULT_OUT
 using Base: AbstractCmd
 
-dpath(x...) = joinpath(DDIR, x...)
-tpath(x...) = joinpath(TDIR, x...)
-
 bcl = closure((cin, cout) -> nothing)
 cmd = `ls`
 file = "xxx"
