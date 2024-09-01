@@ -2,7 +2,7 @@ name = "ChannelBuffers"
 uuid = "79a69506-cdd1-4876-b8e5-7af85e53af4f"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 authors = ["Klaus Crusius <klaus.crusius@web.de>"]
-version = "0.4.1"
+version = "0.4.2"
 
 [deps]
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
@@ -15,7 +15,7 @@ TranscodingStreams = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 CodecZlib = "0.7"
 Downloads = "1"
 Tar = "1"
-TranscodingStreams = "0.9, 0.10"
+TranscodingStreams = "0.9, 0.10, 0.11"
 julia = "1"
 
 [extras]
